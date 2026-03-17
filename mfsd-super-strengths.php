@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Turn-based strengths feedback card game for students and families. Phase A: guess who the card is about. Phase B: guess who wrote it. Confidence tokens, scoring, AI summaries.
- * Version: 1.0.0
+ * Version: 2.0.0
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '1.0.0');
+define('MFSD_SS_VERSION', '2.0.0');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -63,6 +63,23 @@ final class MFSD_Super_Strengths {
         if (!is_user_logged_in()) {
             return '<p class="ss-error">Please log in to play Super Strengths Cards.</p>';
         }
+
+        // ── Ordering gate ──────────────────────────────────────────────────
+        if ( function_exists( 'mfsd_get_task_status' ) && get_option( 'mfsd_ss_course_management', '1' ) === '1' ) {
+            $student_id = get_current_user_id();
+            $status     = mfsd_get_task_status( $student_id, 'super_strengths' );
+
+            if ( $status === 'locked' ) {
+                if ( function_exists( 'mfsd_ordering_locked_message' ) ) {
+                    return mfsd_ordering_locked_message( 'super_strengths' );
+                }
+                return '<p style="text-align:center;padding:40px;color:#555;">This activity is not available yet. Please complete the previous activity first.</p>';
+            }
+            if ( $status === 'available' ) {
+                mfsd_set_task_status( $student_id, 'super_strengths', 'in_progress' );
+            }
+        }
+        // ── End ordering gate ──────────────────────────────────────────────
 
         wp_enqueue_style('mfsd-ss-css');
         wp_enqueue_script('mfsd-ss-js');

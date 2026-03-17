@@ -301,6 +301,12 @@ class MFSD_SS_API {
             'submitted_at'      => current_time('mysql'),
         ], ['id' => $player_id]);
 
+        // ── Ordering: mark in_progress when student submits their cards ────
+        if ( function_exists( 'mfsd_set_task_status' ) && get_option( 'mfsd_ss_course_management', '1' ) === '1' ) {
+            mfsd_set_task_status( $uid, 'super_strengths', 'in_progress' );
+        }
+        // ──────────────────────────────────────────────────────────────────
+
         // Deal if everyone is done
         $pending = (int) $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM $pp WHERE game_id = %d AND submission_status = 'pending'",
@@ -659,6 +665,21 @@ class MFSD_SS_API {
             $received,
             $player['display_name']
         );
+
+        // ── Ordering: mark completed when student reaches their results ────
+        // Only fires when the game is fully complete — the student has played
+        // through the whole activity including the guessing game.
+        if ( function_exists( 'mfsd_set_task_status' ) && get_option( 'mfsd_ss_course_management', '1' ) === '1' ) {
+            global $wpdb;
+            $gp_check = $wpdb->prefix . MFSD_SS_DB::TBL_GAMES;
+            $game_status = $wpdb->get_var( $wpdb->prepare(
+                "SELECT status FROM $gp_check WHERE id = %d", $game_id
+            ) );
+            if ( $game_status === 'complete' ) {
+                mfsd_set_task_status( $uid, 'super_strengths', 'completed' );
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────
 
         return rest_ensure_response([
             'ok'         => true,

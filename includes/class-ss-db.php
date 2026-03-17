@@ -188,6 +188,7 @@ class MFSD_SS_DB {
         add_option('mfsd_ss_free_text_max',      2);
         add_option('mfsd_ss_free_text_min_len',  3);
         add_option('mfsd_ss_free_text_max_len',  40);
+        add_option('mfsd_ss_course_management', '1');
     }
 
     // ── Seed: all 100 Super Strengths from Appendix D ────────────────────────
