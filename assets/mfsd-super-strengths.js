@@ -91,7 +91,8 @@
     const screen = el('div', 'ss-screen');
     screen.appendChild(topBar());
     screen.appendChild(screenEl);
-    const wrap = el('div', 'ss-wrap');
+    const themeClass = cfg.roleHint === 'student' ? 'ss-wrap gamer' : 'ss-wrap corporate';
+    const wrap = el('div', themeClass);
     wrap.appendChild(screen);
     root.replaceChildren(wrap);
   }

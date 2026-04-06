@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Turn-based strengths feedback card game for students and families. Phase A: guess who the card is about. Phase B: guess who wrote it. Confidence tokens, scoring, AI summaries.
- * Version: 2.0.0
+ * Version: 3.0.0
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '2.0.0');
+define('MFSD_SS_VERSION', '3.0.0');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
