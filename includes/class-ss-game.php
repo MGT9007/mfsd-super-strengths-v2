@@ -226,6 +226,7 @@ class MFSD_SS_Game {
 
         if ($unplayed === 0) {
             $wpdb->update($gp, ['status' => 'complete', 'current_turn_id' => null], ['id' => $game_id]);
+            self::notify_task_complete($game_id);
         }
     }
 
@@ -568,6 +569,7 @@ class MFSD_SS_Game {
                 'winner_player_id' => $winner_id,
             ], ['id' => $session_id]);
             $wpdb->update($gp, ['status' => 'complete'], ['id' => $game_id]);
+            self::notify_task_complete($game_id);
         } else {
             // Tiebreaker — 5-second snap; first to click wins
             $timer     = 5;
@@ -640,5 +642,26 @@ class MFSD_SS_Game {
             'pile'                   => json_encode([]),
             'current_turn_player_id' => $student_id ?: (int)$hands[0]['player_id'],
         ], ['id' => $session_id]);
+    }
+
+    // =========================================================================
+    // MFSD COURSES — notify ordering system that Super Strengths is complete
+    // Finds the student player for this game and calls mfsd_set_task_status.
+    // =========================================================================
+    public static function notify_task_complete(int $game_id): void {
+        if (!function_exists('mfsd_set_task_status')) return;
+        global $wpdb;
+
+        $pp = $wpdb->prefix . MFSD_SS_DB::TBL_PLAYERS;
+
+        // Find the student player's WP user_id
+        $student_user_id = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT user_id FROM $pp WHERE game_id = %d AND role = 'student' LIMIT 1",
+            $game_id
+        ));
+
+        if ($student_user_id) {
+            mfsd_set_task_status($student_user_id, 'super_strengths', 'completed');
+        }
     }
 }

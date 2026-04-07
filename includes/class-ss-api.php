@@ -847,6 +847,7 @@ class MFSD_SS_API {
             $gp = $wpdb->prefix . MFSD_SS_DB::TBL_GAMES;
             $wpdb->update($ss, ['status' => 'complete', 'winner_player_id' => $player_id], ['id' => $session_id]);
             $wpdb->update($gp, ['status' => 'complete'], ['id' => $game_id]);
+            MFSD_SS_Game::notify_task_complete($game_id);
         } else {
             MFSD_SS_Game::process_snap_win($session, $player_id, $game_id);
         }
