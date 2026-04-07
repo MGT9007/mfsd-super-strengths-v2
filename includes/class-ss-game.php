@@ -468,6 +468,11 @@ class MFSD_SS_Game {
             $session_id, $winner_player_id
         ));
 
+        // Clear claims for this session so the NEXT snap opportunity can be claimed.
+        // Without this, the won=1 record blocks all subsequent snaps in the same session.
+        $sc_t = $wpdb->prefix . MFSD_SS_DB::TBL_SNAP_CLAIMS;
+        $wpdb->delete($sc_t, ['session_id' => $session_id]);
+
         // Clear pile, winner plays next
         $next_player_id = (int)$winner_player_id;
 
@@ -510,6 +515,9 @@ class MFSD_SS_Game {
             'snap_expires_at'        => null,
             'current_turn_player_id' => $next_player_id,
         ], ['id' => $session_id]);
+
+        // If all hands are empty after expiry, reshuffle pile back into hands
+        self::check_snap_reshuffle($session_id, $game_id);
     }
 
     // =========================================================================
