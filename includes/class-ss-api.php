@@ -823,8 +823,9 @@ class MFSD_SS_API {
             return self::err('no_snap', 'No active snap to claim', 409);
         }
 
-        // Check expiry
-        if (gmdate('Y-m-d H:i:s') > $session['snap_expires_at']) {
+        // Check expiry — 1-second grace period so late-arriving claims still count
+        $claim_grace = gmdate('Y-m-d H:i:s', strtotime($session['snap_expires_at']) + 1);
+        if (gmdate('Y-m-d H:i:s') > $claim_grace) {
             $wpdb->query('ROLLBACK');
             MFSD_SS_Game::expire_snap($session, $game_id);
             return self::snap_session_state($game_id, $uid);
@@ -886,8 +887,11 @@ class MFSD_SS_API {
             $session['status'] = 'playing';
         }
 
-        // Lazy: snap expired — no winner
-        if (in_array($session['status'], ['snap_active','tiebreaker']) && $now >= $session['snap_expires_at']) {
+        // Lazy: snap expired — no winner.
+        // Grace period: expire 1 second AFTER snap_expires_at to avoid race where
+        // a valid claim arrives at the same moment the poll fires the lazy expiry.
+        $grace_expiry = gmdate('Y-m-d H:i:s', strtotime($session['snap_expires_at']) + 1);
+        if (in_array($session['status'], ['snap_active','tiebreaker']) && $now >= $grace_expiry) {
             if ($session['status'] === 'snap_active') {
                 MFSD_SS_Game::expire_snap($session, $game_id);
             } else {
@@ -987,7 +991,7 @@ class MFSD_SS_API {
             'current_turn_player_id' => (int)$session['current_turn_player_id'],
             'pile_count'             => count($pile),
             'pile_top'               => $pile_top_data,
-            'pile_second'            => $pile_second ? ['strength_text' => $pile_second['strength_text']] : null,
+            'pile_second'            => $pile_second,
             'snap_active'            => in_array($session['status'], ['snap_active','tiebreaker']),
             'is_tiebreaker'          => $session['status'] === 'tiebreaker',
             'snap_x'                 => $session['snap_x'] ? (float)$session['snap_x'] : null,
