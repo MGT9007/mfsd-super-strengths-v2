@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Snap mode.
- * Version: 3.14.0
+ * Version: 4.0.0
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '3.14.0');
+define('MFSD_SS_VERSION', '4.0.0');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -74,6 +74,9 @@ final class MFSD_Super_Strengths {
             'snapTimer'            => (int) get_option('mfsd_ss_snap_timer', 3),
             'snapQuickDrawTarget'  => (int) get_option('mfsd_ss_snap_quick_draw_target', 5),
             'isMobileHint'         => wp_is_mobile(),
+            'badgesUrl'            => home_url('/badges/'),
+            'portalUrl'            => home_url('/about/parent-portal-home/'),
+            'courseId'             => 1,
         ]);
 
         return '<div id="mfsd-ss-root"></div>';

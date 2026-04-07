@@ -37,7 +37,7 @@ class MFSD_SS_API {
         register_rest_route($ns, '/snap/session',      [['methods'=>'GET',  'callback'=>[$me,'snap_session'],     'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/snap/play-card',    [['methods'=>'POST', 'callback'=>[$me,'snap_play_card'],   'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/snap/claim',        [['methods'=>'POST', 'callback'=>[$me,'snap_claim'],       'permission_callback'=>[$me,'auth']]]);
-
+        register_rest_route($ns, '/game/summary',      [['methods'=>'GET',  'callback'=>[$me,'game_summary'],     'permission_callback'=>[$me,'auth']]]);
         // ── Admin ────────────────────────────────────────────────────────────
         register_rest_route($ns, '/admin/flag-review', [['methods'=>'POST', 'callback'=>[$me,'flag_review'],      'permission_callback'=>[$me,'is_admin']]]);
     }
@@ -1053,5 +1053,100 @@ class MFSD_SS_API {
             $attempts++;
         } while (abs($pos - $last) < $min_distance && $attempts < 20);
         return $pos;
+    }
+
+    // =========================================================================
+    // GET /game/summary — post-game strength reveal + Steve AI analysis
+    // =========================================================================
+    public static function game_summary(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = self::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in game', 403);
+        $player_id   = (int)$player['id'];
+        $viewer_role = $player['role']; // 'student' or 'parent'
+
+        $cp = $wpdb->prefix . MFSD_SS_DB::TBL_CARDS;
+        $pp = $wpdb->prefix . MFSD_SS_DB::TBL_PLAYERS;
+
+        // Find the student player for this game
+        $student_row = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM $pp WHERE game_id = %d AND role = 'student' LIMIT 1", $game_id
+        ), ARRAY_A);
+        $student_pid = $student_row ? (int)$student_row['id'] : null;
+
+        $cards = $wpdb->get_results($wpdb->prepare(
+            "SELECT c.strength_text,
+                    pa.display_name AS author_name,
+                    pt.display_name AS target_name,
+                    pt.id           AS target_pid
+             FROM {$cp} c
+             JOIN {$pp} pa ON pa.id = c.author_player_id
+             JOIN {$pp} pt ON pt.id = c.target_player_id
+             WHERE c.game_id = %d AND c.flagged = 0
+             ORDER BY c.target_player_id, c.id",
+            $game_id
+        ), ARRAY_A);
+
+        // Group by target
+        $by_target = [];
+        foreach ($cards as $card) {
+            $tid = (int)$card['target_pid'];
+            if (!isset($by_target[$tid])) {
+                $by_target[$tid] = [
+                    'target_name'  => $card['target_name'],
+                    'is_me'        => $tid === $player_id,
+                    'is_student'   => $tid === $student_pid,
+                    'strengths'    => [],
+                ];
+            }
+            $by_target[$tid]['strengths'][] = [
+                'text'   => $card['strength_text'],
+                'author' => $card['author_name'],
+            ];
+        }
+
+        // Sort: for students — own cards first. For parents — student's cards first.
+        usort($by_target, function($a, $b) use ($viewer_role) {
+            $priority_a = ($viewer_role === 'student') ? $a['is_me'] : $a['is_student'];
+            $priority_b = ($viewer_role === 'student') ? $b['is_me'] : $b['is_student'];
+            return (int)$priority_b - (int)$priority_a;
+        });
+
+        // AI summary ONLY for students — never generate an analysis about a parent
+        $ai_summary = '';
+        if ($viewer_role === 'student' && !empty($GLOBALS['mwai'])) {
+            $my_data = null;
+            foreach ($by_target as $t) {
+                if ($t['is_me']) { $my_data = $t; break; }
+            }
+            if ($my_data) {
+                $name = $my_data['target_name'];
+                $list = implode("\n", array_map(
+                    fn($s) => "• {$s['text']} (written by {$s['author']})",
+                    $my_data['strengths']
+                ));
+                $prompt = "You are Steve Sallis, author of the Solutions Mindset. "
+                    . "A family has just played Super Strengths Cards, where each person writes strength cards for the others.\n\n"
+                    . "Here are the strengths {$name}'s family identified for them:\n{$list}\n\n"
+                    . "In 3-4 warm, encouraging sentences, reflect on what these strengths reveal about {$name} as a person "
+                    . "and their potential. Use the Solutions Mindset voice — solution-focused, empowering, specific. "
+                    . "Speak directly to {$name}. Begin with 'Steve says:'";
+                try {
+                    $ai_summary = $GLOBALS['mwai']->simpleTextQuery($prompt);
+                } catch (\Exception $e) {
+                    $ai_summary = '';
+                }
+            }
+        }
+
+        return rest_ensure_response([
+            'ok'          => true,
+            'viewer_role' => $viewer_role,
+            'cards'       => array_values($by_target),
+            'ai_summary'  => $ai_summary,
+        ]);
     }
 }

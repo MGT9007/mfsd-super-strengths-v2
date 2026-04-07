@@ -1616,7 +1616,6 @@
   function renderSnapComplete(data) {
     stopSnapPoll();
     if (snapBullseye) snapBullseye.classList.add('hidden');
-    // Restore role-appropriate theme styling now snap is over
     document.querySelector('.ss-wrap')?.classList.remove('ss-snap-mode');
 
     const winner = (data.players || []).find(p => p.player_id === data.winner_player_id);
@@ -1625,7 +1624,7 @@
 
     const body = el('div', 'ss-screen-body');
     body.innerHTML = `
-      <div class="ss-snap-header">
+      <div class="ss-snap-header ${iWon ? 'winner-header' : ''}">
         <div class="ss-snap-title">${iWon ? '🏆 You Won!' : '🎉 Game Over!'}</div>
         <div class="ss-snap-sub">${iWon ? 'Amazing snapping!' : `${escHtml(winner?.display_name || 'Someone')} wins!`}</div>
       </div>
@@ -1640,12 +1639,82 @@
             </div>
           `).join('')}
         </div>
-        <div class="ss-snap-info-box" style="margin-top:20px;text-align:center;">
-          Want to play again? Ask your teacher or parent to start a new game.
+
+        <hr class="ss-divider" style="margin:20px 0;">
+        <div class="ss-section-label" style="margin-bottom:14px;">🌟 Strengths Revealed</div>
+        <div id="ss-summary-area">
+          <div class="ss-waiting"><div class="ss-dots"><span></span><span></span><span></span></div> Loading your strengths…</div>
         </div>
       </div>
     `;
     render(body);
+
+    // Fetch summary + Steve AI
+    api(`game/summary?game_id=${state.gameId}`)
+      .then(summary => {
+        const area = document.getElementById('ss-summary-area');
+        if (!area) return;
+        let html = '';
+
+        // Steve AI block
+        if (summary.ai_summary) {
+          html += `
+            <div class="ss-steve-summary-block">
+              <div class="ss-steve-avatar-row">
+                <span class="ss-steve-icon">💬</span>
+                <span class="ss-steve-label">Steve Says</span>
+              </div>
+              <div class="ss-steve-summary-text">${escHtml(summary.ai_summary).replace(/\n/g,'<br>')}</div>
+            </div>`;
+        }
+
+        // Cards by target
+        (summary.cards || []).forEach(group => {
+          html += `
+            <div class="ss-summary-group ${group.is_me ? 'is-me' : ''}">
+              <div class="ss-summary-group-title">
+                ${group.is_me ? '⭐ Your Strengths' : `${escHtml(group.target_name)}'s Strengths`}
+              </div>
+              <div class="ss-summary-cards-grid">
+                ${(group.strengths || []).map(s => `
+                  <div class="ss-summary-card">
+                    <div class="ss-summary-card-strength">${escHtml(s.text)}</div>
+                    <div class="ss-summary-card-from">from ${escHtml(s.author)}</div>
+                  </div>`).join('')}
+              </div>
+            </div>`;
+        });
+
+        // Role-based navigation buttons
+        const isStudent = state.player?.role === 'student';
+        const studentPlayer = state.allPlayers.find(p => p.role === 'student');
+        const studentUserId = isStudent ? cfg.userId : (studentPlayer?.user_id || '');
+        const courseUrl = cfg.portalUrl + '?course_id=' + cfg.courseId + '&student_id=' + studentUserId;
+
+        let btnHtml = `<div style="display:flex;flex-direction:column;gap:10px;margin-top:20px;">`;
+        if (isStudent) {
+          btnHtml += `<a href="${escHtml(cfg.badgesUrl)}" class="ss-btn ss-btn-gold ss-btn-full">🏅 See My Badges</a>`;
+        }
+        btnHtml += `<a href="${escHtml(courseUrl)}" class="ss-btn ss-btn-ghost ss-btn-full">📚 Course Details</a>`;
+        btnHtml += `</div>`;
+
+        html += btnHtml;
+
+        area.innerHTML = html;
+      })
+      .catch(() => {
+        const area = document.getElementById('ss-summary-area');
+        if (!area) return;
+        const isStudent = state.player?.role === 'student';
+        const studentPlayer = state.allPlayers.find(p => p.role === 'student');
+        const studentUserId = isStudent ? cfg.userId : (studentPlayer?.user_id || '');
+        const courseUrl = cfg.portalUrl + '?course_id=' + cfg.courseId + '&student_id=' + studentUserId;
+        area.innerHTML = `
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+            ${isStudent ? `<a href="${escHtml(cfg.badgesUrl)}" class="ss-btn ss-btn-gold ss-btn-full">🏅 See My Badges</a>` : ''}
+            <a href="${escHtml(courseUrl)}" class="ss-btn ss-btn-ghost ss-btn-full">📚 Course Details</a>
+          </div>`;
+      });
   }
 
   // =========================================================================
