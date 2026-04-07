@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Snap mode.
- * Version: 4.2.0
+ * Version: 4.3.0
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '4.2.0');
+define('MFSD_SS_VERSION', '4.3.0');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -47,22 +47,26 @@ final class MFSD_Super_Strengths {
             return '<p class="ss-error">Please log in to play Super Strengths Cards.</p>';
         }
 
-        // ── Ordering gate ──────────────────────────────────────────────────
+        // ── Ordering gate — students only ──────────────────────────────────
         if (function_exists('mfsd_get_task_status') && get_option('mfsd_ss_course_management', 1)) {
-            $student_id = get_current_user_id();
-            $status     = mfsd_get_task_status($student_id, 'super_strengths');
+            $student_id  = get_current_user_id();
+            $viewer_role = get_user_meta($student_id, 'mfsd_role', true) ?: '';
 
-            if ($status === 'locked') {
-                if (function_exists('mfsd_ordering_locked_message')) {
-                    return mfsd_ordering_locked_message('super_strengths');
+            // Only gate students — parents/teachers/admins always pass through
+            if ($viewer_role === 'student') {
+                $status = mfsd_get_task_status($student_id, 'super_strengths');
+
+                if ($status === 'locked') {
+                    if (function_exists('mfsd_ordering_locked_message')) {
+                        return mfsd_ordering_locked_message('super_strengths');
+                    }
+                    return '<p style="text-align:center;padding:40px;color:#555;">This activity is not available yet. Please complete the previous activity first.</p>';
                 }
-                return '<p style="text-align:center;padding:40px;color:#555;">This activity is not available yet. Please complete the previous activity first.</p>';
-            }
 
-            if ($status === 'available') {
-                mfsd_set_task_status($student_id, 'super_strengths', 'in_progress');
+                if ($status === 'available') {
+                    mfsd_set_task_status($student_id, 'super_strengths', 'in_progress');
+                }
             }
-            // 'in_progress', 'completed', 'not_configured' — fall through to normal render
         }
         // ── End ordering gate ──────────────────────────────────────────────
 
