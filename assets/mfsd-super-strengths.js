@@ -1433,13 +1433,17 @@
           <div class="ss-snap-card-suit br">♦</div>
         </div>`;
 
-      // Previous card (straddle) — show behind and slightly offset
+      // Previous card (straddle) — show behind and slightly offset, full sentence
       let behindHtml = '';
       if (data.pile_second) {
+        const s = data.pile_second;
         behindHtml = `
           <div class="ss-snap-card ss-snap-card-behind">
             <div class="ss-snap-card-suit tl">♦</div>
-            <div class="ss-snap-card-text">${escHtml(data.pile_second.strength_text)}</div>
+            ${s.author_name ? `<div class="ss-snap-card-author">${escHtml(s.author_name)} thinks</div>` : ''}
+            ${s.target_name ? `<div class="ss-snap-card-target-big">${escHtml(s.target_name)}</div>` : ''}
+            <div class="ss-snap-card-is-label">is</div>
+            <div class="ss-snap-card-text">${escHtml(s.strength_text)}</div>
             <div class="ss-snap-card-suit br">♦</div>
           </div>`;
       }
@@ -1568,15 +1572,26 @@
   // =========================================================================
   // SNAP — CLAIM SNAP
   // =========================================================================
+  let snapClaiming = false; // guard against double-fire
+
   async function claimSnap() {
+    if (snapClaiming) return;
     if (!snapBullseye || snapBullseye.classList.contains('hidden')) return;
+    snapClaiming = true;
+
+    // Hide bullseye immediately — optimistic UI, prevents double-click 409s
+    snapBullseye.classList.add('hidden');
     snapBullseye.classList.add('claiming');
+
     try {
       const data = await api('snap/claim', 'POST', { game_id: state.gameId });
-      // Show win flash
       showSnapResult(data);
     } catch(e) {
+      // Restore bullseye only if snap is still active (e.g. claim beat us to it)
       snapBullseye.classList.remove('claiming');
+      // Don't re-show — the poll will decide whether to show it again
+    } finally {
+      snapClaiming = false;
     }
   }
 

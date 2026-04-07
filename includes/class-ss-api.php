@@ -957,8 +957,25 @@ class MFSD_SS_API {
             ];
         }
 
-        // Also include the second card for the straddle effect
-        $pile_second = count($pile) >= 2 ? $pile[count($pile) - 2] : null;
+        // Also include the second card for the straddle effect — with full author/target
+        $pile_second = null;
+        if (count($pile) >= 2) {
+            $second_raw = $pile[count($pile) - 2];
+            $second_detail = !empty($second_raw['card_id']) ? $wpdb->get_row($wpdb->prepare(
+                "SELECT pa.display_name AS author_name, pt.display_name AS target_name
+                 FROM {$cp_t} c
+                 JOIN {$pp} pa ON pa.id = c.author_player_id
+                 JOIN {$pp} pt ON pt.id = c.target_player_id
+                 WHERE c.id = %d",
+                (int)$second_raw['card_id']
+            ), ARRAY_A) : null;
+
+            $pile_second = [
+                'strength_text' => $second_raw['strength_text'],
+                'author_name'   => $second_detail['author_name'] ?? null,
+                'target_name'   => $second_detail['target_name'] ?? null,
+            ];
+        }
 
         return rest_ensure_response([
             'ok'                     => true,
