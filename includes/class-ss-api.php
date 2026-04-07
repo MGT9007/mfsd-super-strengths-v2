@@ -799,6 +799,8 @@ class MFSD_SS_API {
     // =========================================================================
     // SNAP — POST /snap/claim
     // Atomic: first valid claim wins. Uses DB transaction + FOR UPDATE.
+    // Status is set to 'playing' INSIDE the transaction so any concurrent claim
+    // finds status changed and returns no_snap — no separate already_won check needed.
     // =========================================================================
     public static function snap_claim(WP_REST_Request $req) {
         global $wpdb;
@@ -833,21 +835,15 @@ class MFSD_SS_API {
 
         $session_id = (int)$session['id'];
 
-        // Check if already claimed
-        $already_won = $wpdb->get_var($wpdb->prepare(
-            "SELECT id FROM $sc WHERE session_id = %d AND won = 1", $session_id
-        ));
-        if ($already_won) {
-            $wpdb->query('ROLLBACK');
-            return self::err('already_claimed', 'Snap already claimed', 409);
-        }
-
-        // Record this claim as winner
+        // Record claim and immediately set status to 'snap_claimed' within the
+        // transaction — concurrent claims find status changed and return no_snap.
         $wpdb->insert($sc, ['session_id' => $session_id, 'player_id' => $player_id, 'won' => 1]);
+        $wpdb->query($wpdb->prepare(
+            "UPDATE $ss SET status = 'snap_claimed' WHERE id = %d", $session_id
+        ));
         $wpdb->query('COMMIT');
 
         if ($session['status'] === 'tiebreaker') {
-            // Tiebreaker win = outright game winner
             $gp = $wpdb->prefix . MFSD_SS_DB::TBL_GAMES;
             $wpdb->update($ss, ['status' => 'complete', 'winner_player_id' => $player_id], ['id' => $session_id]);
             $wpdb->update($gp, ['status' => 'complete'], ['id' => $game_id]);
@@ -891,7 +887,7 @@ class MFSD_SS_API {
         // Grace period: expire 1 second AFTER snap_expires_at to avoid race where
         // a valid claim arrives at the same moment the poll fires the lazy expiry.
         $grace_expiry = gmdate('Y-m-d H:i:s', strtotime($session['snap_expires_at']) + 1);
-        if (in_array($session['status'], ['snap_active','tiebreaker']) && $now >= $grace_expiry) {
+        if (in_array($session['status'], ['snap_active','tiebreaker','snap_claimed']) && $now >= $grace_expiry) {
             if ($session['status'] === 'snap_active') {
                 MFSD_SS_Game::expire_snap($session, $game_id);
             } else {
