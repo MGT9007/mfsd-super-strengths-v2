@@ -934,6 +934,32 @@ class MFSD_SS_API {
         $pile     = json_decode($session['pile'], true) ?: [];
         $pile_top = !empty($pile) ? $pile[count($pile) - 1] : null;
 
+        // Enrich pile_top with author and target names from the cards table
+        $pile_top_data = null;
+        if ($pile_top) {
+            $cp_t = $wpdb->prefix . MFSD_SS_DB::TBL_CARDS;
+            $card_detail = !empty($pile_top['card_id']) ? $wpdb->get_row($wpdb->prepare(
+                "SELECT c.author_player_id, c.target_player_id,
+                        pa.display_name AS author_name,
+                        pt.display_name AS target_name
+                 FROM {$cp_t} c
+                 JOIN {$pp} pa ON pa.id = c.author_player_id
+                 JOIN {$pp} pt ON pt.id = c.target_player_id
+                 WHERE c.id = %d",
+                (int)$pile_top['card_id']
+            ), ARRAY_A) : null;
+
+            $pile_top_data = [
+                'strength_text'       => $pile_top['strength_text'],
+                'played_by_player_id' => (int)$pile_top['played_by_player_id'],
+                'author_name'         => $card_detail['author_name'] ?? null,
+                'target_name'         => $card_detail['target_name'] ?? null,
+            ];
+        }
+
+        // Also include the second card for the straddle effect
+        $pile_second = count($pile) >= 2 ? $pile[count($pile) - 2] : null;
+
         return rest_ensure_response([
             'ok'                     => true,
             'session_id'             => $session_id,
@@ -943,10 +969,8 @@ class MFSD_SS_API {
             'snap_timer_seconds'     => (int)$session['snap_timer_seconds'],
             'current_turn_player_id' => (int)$session['current_turn_player_id'],
             'pile_count'             => count($pile),
-            'pile_top'               => $pile_top ? [
-                'strength_text'       => $pile_top['strength_text'],
-                'played_by_player_id' => (int)$pile_top['played_by_player_id'],
-            ] : null,
+            'pile_top'               => $pile_top_data,
+            'pile_second'            => $pile_second ? ['strength_text' => $pile_second['strength_text']] : null,
             'snap_active'            => in_array($session['status'], ['snap_active','tiebreaker']),
             'is_tiebreaker'          => $session['status'] === 'tiebreaker',
             'snap_x'                 => $session['snap_x'] ? (float)$session['snap_x'] : null,

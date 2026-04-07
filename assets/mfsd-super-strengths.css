@@ -1039,11 +1039,36 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   box-shadow: 0 4px 20px rgba(201,162,39,0.35), 0 0 0 1px rgba(201,162,39,0.2);
   z-index: 2;
 }
+/* Straddle: behind card rotated and offset so it peeks out visibly */
 .ss-snap-card-behind {
-  background: linear-gradient(135deg, var(--ss-purple) 0%, #4a2a8a 100%);
+  background: linear-gradient(135deg, #2a1f4e 0%, #1a1030 100%);
   border-color: rgba(201,162,39,0.4);
-  transform: rotate(-3deg) translate(-4px, 4px);
+  transform: rotate(-8deg) translate(-14px, 10px);
   z-index: 1;
+  opacity: 0.85;
+}
+.ss-snap-card-author {
+  font-size: 9px;
+  color: var(--ss-gold);
+  text-align: center;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.ss-snap-card-target {
+  font-size: 10px;
+  color: var(--ss-gold-lt);
+  text-align: center;
+  margin-top: 4px;
+  font-style: italic;
+  line-height: 1.2;
+}
+.ss-snap-card-text-sm {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.45);
+  text-align: center;
 }
 .ss-snap-card-suit {
   font-size: 14px;

@@ -1399,17 +1399,30 @@
     if (!pile) return;
 
     if (data.pile_top) {
-      pile.innerHTML = `
+      const authorLine = data.pile_top.author_name
+        ? `<div class="ss-snap-card-author">${escHtml(data.pile_top.author_name)} thinks</div>`
+        : '';
+      const targetLine = data.pile_top.target_name
+        ? `<div class="ss-snap-card-target">${escHtml(data.pile_top.target_name)}</div>`
+        : '';
+
+      // Straddle: show previous card peeking out behind if pile has 2+ cards
+      let straddleHtml = '';
+      if (data.pile_second) {
+        straddleHtml = `<div class="ss-snap-card ss-snap-card-behind">
+          <div class="ss-snap-card-text-sm">${escHtml(data.pile_second.strength_text)}</div>
+        </div>`;
+      }
+
+      pile.innerHTML = straddleHtml + `
         <div class="ss-snap-card ss-snap-card-face-up">
           <div class="ss-snap-card-suit tl">♦</div>
+          ${authorLine}
           <div class="ss-snap-card-text">${escHtml(data.pile_top.strength_text)}</div>
+          ${targetLine}
           <div class="ss-snap-card-suit br">♦</div>
         </div>
       `;
-      if (data.pile_count > 1) {
-        pile.insertAdjacentHTML('afterbegin',
-          `<div class="ss-snap-card ss-snap-card-behind"></div>`);
-      }
       if (pileLabel) pileLabel.textContent = data.pile_count > 1
         ? `${data.pile_count} cards in pile`
         : '1 card';
@@ -1473,30 +1486,15 @@
       </div>
     `;
 
-    // Desktop: right-click to claim
+    // Both left-click and right-click claim snap on all devices.
+    // The moving random position + short timer is the anti-cheat — not the button type.
+    snapBullseye.addEventListener('click', () => {
+      if (!snapBullseye.classList.contains('hidden')) claimSnap();
+    });
     snapBullseye.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (!snapBullseye.classList.contains('hidden')) claimSnap();
     });
-
-    // Mobile: double-tap within 1 second to claim
-    if (isMobile()) {
-      snapBullseye.addEventListener('click', () => {
-        mobileTapCount++;
-        if (mobileTapCount === 1) {
-          snapBullseye.classList.add('tapped-once');
-          mobileTapTimer = setTimeout(() => {
-            mobileTapCount = 0;
-            snapBullseye.classList.remove('tapped-once');
-          }, 1000);
-        } else if (mobileTapCount >= 2) {
-          clearTimeout(mobileTapTimer);
-          mobileTapCount = 0;
-          snapBullseye.classList.remove('tapped-once');
-          claimSnap();
-        }
-      });
-    }
 
     container.appendChild(snapBullseye);
   }
@@ -1535,9 +1533,13 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Playing…'; }
     try {
       await api('snap/play-card', 'POST', { game_id: state.gameId });
-      // Poll will pick up new state immediately
+      // State will update via next poll — don't re-enable button
     } catch(e) {
-      if (btn) { btn.disabled = false; btn.textContent = isMobile() ? '👆 Tap to play card' : '▶ Play Card'; }
+      // 409 = not your turn (stale state) — let poll refresh, don't re-enable
+      if (btn && e.message && !e.message.includes('409') && !e.message.includes('Conflict')) {
+        btn.disabled = false;
+        btn.textContent = isMobile() ? '👆 Tap to play card' : '▶ Play Card';
+      }
     }
   }
 
