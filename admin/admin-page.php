@@ -101,7 +101,14 @@ if (isset($_POST['ss_reset_game']) && check_admin_referer('mfsd_ss_reset')) {
              WHERE game_id = %d",
             $gid
         ));
-        $wpdb->update($gp, ['status' => 'submission', 'current_turn_id' => null], ['id' => $gid]);
+        $wpdb->update($gp, [
+            'status'             => 'submission',
+            'current_turn_id'    => null,
+            'mode'               => get_option('mfsd_ss_mode', 'full'),
+            'round_limit'        => (int) get_option('mfsd_ss_round_limit', 3),
+            'turn_timeout_hours' => (int) get_option('mfsd_ss_turn_timeout', 24),
+            'vote_timeout_hours' => (int) get_option('mfsd_ss_vote_timeout', 24),
+        ], ['id' => $gid]);
         $notice = ['success', 'Game #' . $gid . ' has been reset to submission phase.'];
     }
 }
