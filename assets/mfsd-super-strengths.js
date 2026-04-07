@@ -718,8 +718,14 @@
       state.allPlayers = res.players || state.allPlayers;
 
       if (res.all_submitted) {
-        state.gameStatus = 'dealing';
-        renderDealing();
+        // Re-fetch full state so gameMode is current, then route correctly
+        const fresh = await api('state');
+        state.gameStatus = fresh.status;
+        state.gameMode   = fresh.game_mode || state.gameMode;
+        state.player     = fresh.player     || state.player;
+        state.allPlayers = fresh.all_players || state.allPlayers;
+        state.hand       = fresh.hand || [];
+        routeToScreen();
       } else {
         renderSubmissionWaiting();
       }
@@ -772,9 +778,10 @@
         if (data.status === 'playing' || data.status === 'dealing') {
           stopPoll();
           state.gameStatus = data.status;
-          state.hand = data.hand || [];
-          if (data.status === 'playing') renderGameTable();
-          else renderDealing();
+          state.gameMode   = data.game_mode || state.gameMode;
+          state.player     = data.player    || state.player;
+          state.hand       = data.hand || [];
+          routeToScreen();
         } else {
           updateWaitStatus();
         }
@@ -817,10 +824,11 @@
         if (data.status === 'playing') {
           stopPoll();
           state.gameStatus = 'playing';
-          state.player = data.player || state.player;
+          state.gameMode   = data.game_mode || state.gameMode;
+          state.player     = data.player    || state.player;
           state.allPlayers = data.all_players || state.allPlayers;
-          state.hand = data.hand || [];
-          renderGameTable();
+          state.hand       = data.hand || [];
+          routeToScreen();
         }
       } catch(_) {}
     }, 4000);
