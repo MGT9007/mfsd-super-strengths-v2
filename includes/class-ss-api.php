@@ -697,7 +697,7 @@ class MFSD_SS_API {
             ));
             if ($joined >= $total) {
                 // Everyone here — start 3-second countdown
-                $countdown_ends = date('Y-m-d H:i:s', strtotime('+3 seconds'));
+                $countdown_ends = gmdate('Y-m-d H:i:s', time() + 3);
                 $wpdb->update($ss, ['status' => 'countdown', 'countdown_ends_at' => $countdown_ends], ['id' => $session_id]);
             }
         }
@@ -768,7 +768,7 @@ class MFSD_SS_API {
 
         if ($snap_triggered) {
             $timer     = (int)$session['snap_timer_seconds'];
-            $expires   = date('Y-m-d H:i:s', strtotime("+{$timer} seconds"));
+            $expires   = gmdate('Y-m-d H:i:s', time() + $timer);
             // Random bullseye position — never the same area twice (offset from last position)
             $last_x    = $session['snap_x'] ? (float)$session['snap_x'] : 50;
             $last_y    = $session['snap_y'] ? (float)$session['snap_y'] : 50;
@@ -824,7 +824,7 @@ class MFSD_SS_API {
         }
 
         // Check expiry
-        if (current_time('mysql') > $session['snap_expires_at']) {
+        if (gmdate('Y-m-d H:i:s') > $session['snap_expires_at']) {
             $wpdb->query('ROLLBACK');
             MFSD_SS_Game::expire_snap($session, $game_id);
             return self::snap_session_state($game_id, $uid);
@@ -878,7 +878,7 @@ class MFSD_SS_API {
         if (!$session) return self::err('no_session', 'No snap session', 404);
 
         $session_id = (int)$session['id'];
-        $now        = current_time('mysql');
+        $now        = gmdate('Y-m-d H:i:s'); // UTC — matches gmdate() expiry times
 
         // Lazy: countdown → playing
         if ($session['status'] === 'countdown' && $now >= $session['countdown_ends_at']) {

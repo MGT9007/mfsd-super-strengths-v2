@@ -563,7 +563,7 @@ class MFSD_SS_Game {
         } else {
             // Tiebreaker — 5-second snap; first to click wins
             $timer     = 5;
-            $expires   = date('Y-m-d H:i:s', strtotime("+{$timer} seconds"));
+            $expires   = gmdate('Y-m-d H:i:s', time() + $timer);
             $snap_x    = rand(10, 85);
             $snap_y    = rand(20, 75);
             $wpdb->update($ss, [

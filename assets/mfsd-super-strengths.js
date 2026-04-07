@@ -1415,35 +1415,36 @@
   }
 
   function updateSnapPile(data) {
-    const pile    = document.getElementById('ss-snap-pile');
+    const pile      = document.getElementById('ss-snap-pile');
     const pileLabel = document.getElementById('ss-snap-pile-label');
     if (!pile) return;
 
     if (data.pile_top) {
-      const authorLine = data.pile_top.author_name
-        ? `<div class="ss-snap-card-author">${escHtml(data.pile_top.author_name)} thinks</div>`
-        : '';
-      const targetLine = data.pile_top.target_name
-        ? `<div class="ss-snap-card-target">${escHtml(data.pile_top.target_name)}</div>`
-        : '';
+      const t = data.pile_top;
 
-      // Straddle: show previous card peeking out behind if pile has 2+ cards
-      let straddleHtml = '';
-      if (data.pile_second) {
-        straddleHtml = `<div class="ss-snap-card ss-snap-card-behind">
-          <div class="ss-snap-card-text-sm">${escHtml(data.pile_second.strength_text)}</div>
-        </div>`;
-      }
-
-      pile.innerHTML = straddleHtml + `
+      // Current top card — full sentence: "[Author] thinks [Target] is [Strength]"
+      const topHtml = `
         <div class="ss-snap-card ss-snap-card-face-up">
           <div class="ss-snap-card-suit tl">♦</div>
-          ${authorLine}
-          <div class="ss-snap-card-text">${escHtml(data.pile_top.strength_text)}</div>
-          ${targetLine}
+          ${t.author_name ? `<div class="ss-snap-card-author">${escHtml(t.author_name)} thinks</div>` : ''}
+          ${t.target_name ? `<div class="ss-snap-card-target-big">${escHtml(t.target_name)}</div>` : ''}
+          <div class="ss-snap-card-is-label">is</div>
+          <div class="ss-snap-card-text">${escHtml(t.strength_text)}</div>
           <div class="ss-snap-card-suit br">♦</div>
-        </div>
-      `;
+        </div>`;
+
+      // Previous card (straddle) — show behind and slightly offset
+      let behindHtml = '';
+      if (data.pile_second) {
+        behindHtml = `
+          <div class="ss-snap-card ss-snap-card-behind">
+            <div class="ss-snap-card-suit tl">♦</div>
+            <div class="ss-snap-card-text">${escHtml(data.pile_second.strength_text)}</div>
+            <div class="ss-snap-card-suit br">♦</div>
+          </div>`;
+      }
+
+      pile.innerHTML = behindHtml + topHtml;
       if (pileLabel) pileLabel.textContent = data.pile_count > 1
         ? `${data.pile_count} cards in pile`
         : '1 card';

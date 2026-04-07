@@ -1009,19 +1009,20 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  min-height: 160px;
+  min-height: 170px;
   position: relative;
 }
+/* Pile is wide enough to show two overlapping cards */
 .ss-snap-pile {
   position: relative;
-  width: 120px;
-  height: 160px;
+  width: 210px;
+  height: 162px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Playing card */
+/* Playing card base */
 .ss-snap-card {
   position: absolute;
   width: 110px;
@@ -1034,41 +1035,46 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   padding: 8px;
   border: 2px solid var(--ss-gold);
 }
+/* Current top card — right side, slight clockwise rotation */
 .ss-snap-card-face-up {
   background: linear-gradient(135deg, #1e1535 0%, #2d1f4e 100%);
-  box-shadow: 0 4px 20px rgba(201,162,39,0.35), 0 0 0 1px rgba(201,162,39,0.2);
+  box-shadow: 0 4px 20px rgba(201,162,39,0.35);
   z-index: 2;
+  right: 0;
+  transform: rotate(3deg);
 }
-/* Straddle: behind card rotated and offset so it peeks out visibly */
+/* Previous card — left side, counter-clockwise, both fully readable */
 .ss-snap-card-behind {
   background: linear-gradient(135deg, #2a1f4e 0%, #1a1030 100%);
-  border-color: rgba(201,162,39,0.4);
-  transform: rotate(-8deg) translate(-14px, 10px);
+  border-color: rgba(201,162,39,0.55);
   z-index: 1;
-  opacity: 0.85;
+  left: 0;
+  transform: rotate(-3deg);
 }
+/* Card sentence format */
 .ss-snap-card-author {
   font-size: 9px;
   color: var(--ss-gold);
   text-align: center;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   line-height: 1.2;
 }
-.ss-snap-card-target {
-  font-size: 10px;
+.ss-snap-card-target-big {
+  font-size: 11px;
+  font-weight: 700;
   color: var(--ss-gold-lt);
   text-align: center;
-  margin-top: 4px;
-  font-style: italic;
   line-height: 1.2;
+  margin-bottom: 2px;
 }
-.ss-snap-card-text-sm {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.45);
-  text-align: center;
+.ss-snap-card-is-label {
+  font-size: 9px;
+  color: var(--ss-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
 }
 .ss-snap-card-suit {
   font-size: 14px;
