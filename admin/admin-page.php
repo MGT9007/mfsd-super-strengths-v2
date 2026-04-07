@@ -124,6 +124,28 @@ if (isset($_POST['ss_reset_game']) && check_admin_referer('mfsd_ss_reset')) {
     }
 }
 
+// ── Delete game (complete games only) ─────────────────────────────────────────
+if (isset($_POST['ss_delete_game']) && check_admin_referer('mfsd_ss_delete_game')) {
+    $gid = (int)($_POST['delete_game_id'] ?? 0);
+    if ($gid) {
+        $ssp = $wpdb->prefix . MFSD_SS_DB::TBL_SNAP_SESSIONS;
+        $shp = $wpdb->prefix . MFSD_SS_DB::TBL_SNAP_HANDS;
+        $scp = $wpdb->prefix . MFSD_SS_DB::TBL_SNAP_CLAIMS;
+        $old_session_ids = $wpdb->get_col($wpdb->prepare("SELECT id FROM $ssp WHERE game_id = %d", $gid));
+        foreach ($old_session_ids as $sid) {
+            $wpdb->delete($shp, ['session_id' => (int)$sid]);
+            $wpdb->delete($scp, ['session_id' => (int)$sid]);
+        }
+        $wpdb->delete($ssp, ['game_id' => $gid]);
+        $wpdb->query($wpdb->prepare("DELETE FROM $vp WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $tp WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $cp WHERE game_id = %d", $gid));
+        $wpdb->delete($pp, ['game_id' => $gid]);
+        $wpdb->delete($gp, ['id' => $gid]);
+        $notice = ['success', 'Game #' . $gid . ' has been permanently deleted.'];
+    }
+}
+
 // ── Add strength ──────────────────────────────────────────────────────────────
 if (isset($_POST['ss_add_strength']) && check_admin_referer('mfsd_ss_strength')) {
     $text = sanitize_text_field($_POST['strength_text'] ?? '');
@@ -585,6 +607,13 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                            onclick="return confirm('Reset game #<?php echo $g['id']; ?>? This deletes all cards, turns and votes.')">
                 </form>
                 <?php endif; ?>
+                <form method="post" style="margin-top:6px;">
+                    <?php wp_nonce_field('mfsd_ss_delete_game'); ?>
+                    <input type="hidden" name="ss_delete_game" value="1">
+                    <input type="hidden" name="delete_game_id" value="<?php echo $g['id']; ?>">
+                    <input type="submit" class="button button-small delete-link" value="🗑 Delete game"
+                           onclick="return confirm('Permanently delete game #<?php echo $g['id']; ?> and ALL its data? This cannot be undone.')">
+                </form>
             </div>
             <?php endforeach; ?>
         <?php endif; ?>
