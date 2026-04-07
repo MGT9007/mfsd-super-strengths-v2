@@ -8,41 +8,45 @@ if (!defined('ABSPATH')) exit;
 
 class MFSD_SS_DB {
 
-    // Fixed per spec: each player writes exactly 5 cards per target
     const CARDS_PER_TARGET = 5;
 
-    // Table name slugs (without wpdb prefix)
-    const TBL_GAMES     = 'mfsd_ss_games';
-    const TBL_PLAYERS   = 'mfsd_ss_players';
-    const TBL_CARDS     = 'mfsd_ss_cards';
-    const TBL_TURNS     = 'mfsd_ss_turns';
-    const TBL_VOTES     = 'mfsd_ss_votes';
-    const TBL_STRENGTHS = 'mfsd_ss_strengths';
-    const TBL_BANNED    = 'mfsd_ss_banned_terms';
-    const TBL_FLAGS     = 'mfsd_ss_flagged';
+    const TBL_GAMES         = 'mfsd_ss_games';
+    const TBL_PLAYERS       = 'mfsd_ss_players';
+    const TBL_CARDS         = 'mfsd_ss_cards';
+    const TBL_TURNS         = 'mfsd_ss_turns';
+    const TBL_VOTES         = 'mfsd_ss_votes';
+    const TBL_STRENGTHS     = 'mfsd_ss_strengths';
+    const TBL_BANNED        = 'mfsd_ss_banned_terms';
+    const TBL_FLAGS         = 'mfsd_ss_flagged';
+    // Snap tables
+    const TBL_SNAP_SESSIONS = 'mfsd_ss_snap_sessions';
+    const TBL_SNAP_HANDS    = 'mfsd_ss_snap_hands';
+    const TBL_SNAP_CLAIMS   = 'mfsd_ss_snap_claims';
 
-    /**
-     * Called on plugin activation.
-     */
     public static function install() {
         global $wpdb;
         $c = $wpdb->get_charset_collate();
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-        $g  = $wpdb->prefix . self::TBL_GAMES;
-        $p  = $wpdb->prefix . self::TBL_PLAYERS;
-        $ca = $wpdb->prefix . self::TBL_CARDS;
-        $t  = $wpdb->prefix . self::TBL_TURNS;
-        $v  = $wpdb->prefix . self::TBL_VOTES;
-        $s  = $wpdb->prefix . self::TBL_STRENGTHS;
-        $b  = $wpdb->prefix . self::TBL_BANNED;
-        $fl = $wpdb->prefix . self::TBL_FLAGS;
+        $g   = $wpdb->prefix . self::TBL_GAMES;
+        $p   = $wpdb->prefix . self::TBL_PLAYERS;
+        $ca  = $wpdb->prefix . self::TBL_CARDS;
+        $t   = $wpdb->prefix . self::TBL_TURNS;
+        $v   = $wpdb->prefix . self::TBL_VOTES;
+        $s   = $wpdb->prefix . self::TBL_STRENGTHS;
+        $b   = $wpdb->prefix . self::TBL_BANNED;
+        $fl  = $wpdb->prefix . self::TBL_FLAGS;
+        $ss  = $wpdb->prefix . self::TBL_SNAP_SESSIONS;
+        $sh  = $wpdb->prefix . self::TBL_SNAP_HANDS;
+        $sc  = $wpdb->prefix . self::TBL_SNAP_CLAIMS;
 
-        // Games —  one row per game session
+        // NOTE: If upgrading from v1, run:
+        // ALTER TABLE wp_mfsd_ss_games MODIFY mode ENUM('short','full','snap') NOT NULL DEFAULT 'full';
+
         dbDelta("CREATE TABLE $g (
             id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             status              ENUM('submission','dealing','playing','complete') NOT NULL DEFAULT 'submission',
-            mode                ENUM('short','full') NOT NULL DEFAULT 'full',
+            mode                ENUM('short','full','snap') NOT NULL DEFAULT 'full',
             round_limit         INT NOT NULL DEFAULT 3,
             turn_timeout_hours  INT NOT NULL DEFAULT 24,
             vote_timeout_hours  INT NOT NULL DEFAULT 24,
@@ -52,7 +56,6 @@ class MFSD_SS_DB {
             PRIMARY KEY (id)
         ) $c;");
 
-        // Players — one row per user per game
         dbDelta("CREATE TABLE $p (
             id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             game_id           BIGINT UNSIGNED NOT NULL,
@@ -70,13 +73,12 @@ class MFSD_SS_DB {
             KEY idx_user (user_id)
         ) $c;");
 
-        // Cards — one row per submitted Super Strength card
         dbDelta("CREATE TABLE $ca (
             id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             game_id             BIGINT UNSIGNED NOT NULL,
             author_player_id    BIGINT UNSIGNED NOT NULL,
             target_player_id    BIGINT UNSIGNED NOT NULL,
-            strength_id         BIGINT UNSIGNED NULL COMMENT 'NULL if free-text',
+            strength_id         BIGINT UNSIGNED NULL,
             strength_text       VARCHAR(100) NOT NULL,
             is_free_text        TINYINT(1) NOT NULL DEFAULT 0,
             flagged             TINYINT(1) NOT NULL DEFAULT 0,
@@ -90,12 +92,11 @@ class MFSD_SS_DB {
             KEY idx_dealt  (dealt_to_player_id)
         ) $c;");
 
-        // Turns — one row per card play
         dbDelta("CREATE TABLE $t (
             id                     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             game_id                BIGINT UNSIGNED NOT NULL,
             turn_number            INT NOT NULL,
-            card_id                BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 until player chooses',
+            card_id                BIGINT UNSIGNED NOT NULL DEFAULT 0,
             played_by_player_id    BIGINT UNSIGNED NOT NULL,
             phase                  ENUM('A','B','complete') NOT NULL DEFAULT 'A',
             phase_a_reveal_at      DATETIME NULL,
@@ -109,7 +110,6 @@ class MFSD_SS_DB {
             KEY idx_card (card_id)
         ) $c;");
 
-        // Votes — one row per player per phase per turn
         dbDelta("CREATE TABLE $v (
             id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             turn_id             BIGINT UNSIGNED NOT NULL,
@@ -127,7 +127,6 @@ class MFSD_SS_DB {
             KEY idx_game (game_id)
         ) $c;");
 
-        // Strengths — admin-managed word list
         dbDelta("CREATE TABLE $s (
             id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             strength_text VARCHAR(100) NOT NULL,
@@ -140,7 +139,6 @@ class MFSD_SS_DB {
             KEY idx_active   (active)
         ) $c;");
 
-        // Banned terms — profanity, violence, sexual, self-harm, custom
         dbDelta("CREATE TABLE $b (
             id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             term        VARCHAR(100) NOT NULL,
@@ -154,7 +152,6 @@ class MFSD_SS_DB {
             KEY idx_active   (active)
         ) $c;");
 
-        // Flagged free-text submissions awaiting admin review
         dbDelta("CREATE TABLE $fl (
             id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             game_id           BIGINT UNSIGNED NOT NULL,
@@ -171,14 +168,67 @@ class MFSD_SS_DB {
             KEY idx_game   (game_id)
         ) $c;");
 
-        // Seed tables if empty
+        // ── Snap: one session per snap game ───────────────────────────────────
+        // Pile stored as JSON array [{card_id, strength_text, played_by_player_id}]
+        // index 0 = bottom, last = top (most recently played)
+        dbDelta("CREATE TABLE $ss (
+            id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id                 BIGINT UNSIGNED NOT NULL,
+            status                  ENUM('waiting','countdown','playing','snap_active','tiebreaker','complete') NOT NULL DEFAULT 'waiting',
+            snap_mode               ENUM('quick_draw','until_death') NOT NULL DEFAULT 'quick_draw',
+            quick_draw_target       INT NOT NULL DEFAULT 5,
+            snap_timer_seconds      INT NOT NULL DEFAULT 3,
+            current_turn_player_id  BIGINT UNSIGNED NULL,
+            pile                    LONGTEXT NULL COMMENT 'JSON array of played cards',
+            snap_x                  DECIMAL(5,2) NULL COMMENT 'Bullseye x position as % of container',
+            snap_y                  DECIMAL(5,2) NULL COMMENT 'Bullseye y position as % of container',
+            snap_expires_at         DATETIME NULL,
+            countdown_ends_at       DATETIME NULL,
+            total_snaps_won         INT NOT NULL DEFAULT 0,
+            last_snap_winner_id     BIGINT UNSIGNED NULL,
+            winner_player_id        BIGINT UNSIGNED NULL,
+            created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_game   (game_id),
+            KEY idx_status (status)
+        ) $c;");
+
+        // ── Snap: one hand per player per session ─────────────────────────────
+        // cards = JSON [{card_id, strength_text}], index 0 = next to play
+        dbDelta("CREATE TABLE $sh (
+            id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            session_id  BIGINT UNSIGNED NOT NULL,
+            player_id   BIGINT UNSIGNED NOT NULL,
+            cards       LONGTEXT NOT NULL COMMENT 'JSON ordered hand',
+            snap_score  INT NOT NULL DEFAULT 0,
+            is_present  TINYINT(1) NOT NULL DEFAULT 0,
+            joined_at   DATETIME NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_session_player (session_id, player_id),
+            KEY idx_session (session_id),
+            KEY idx_player  (player_id)
+        ) $c;");
+
+        // ── Snap: claim log — millisecond precision for tiebreak audit ─────────
+        dbDelta("CREATE TABLE $sc (
+            id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            session_id  BIGINT UNSIGNED NOT NULL,
+            player_id   BIGINT UNSIGNED NOT NULL,
+            claimed_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            won         TINYINT(1) NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            KEY idx_session (session_id)
+        ) $c;");
+
+        // Seed
         $count_s = (int) $wpdb->get_var("SELECT COUNT(*) FROM $s");
         if ($count_s === 0) self::seed_strengths();
 
         $count_b = (int) $wpdb->get_var("SELECT COUNT(*) FROM $b");
         if ($count_b === 0) self::seed_banned_terms();
 
-        // Default plugin options
+        // Default options — guessing game
         add_option('mfsd_ss_mode',              'full');
         add_option('mfsd_ss_round_limit',        3);
         add_option('mfsd_ss_turn_timeout',       24);
@@ -188,16 +238,18 @@ class MFSD_SS_DB {
         add_option('mfsd_ss_free_text_max',      2);
         add_option('mfsd_ss_free_text_min_len',  3);
         add_option('mfsd_ss_free_text_max_len',  40);
-        add_option('mfsd_ss_course_management', '1');
+        // Default options — snap
+        add_option('mfsd_ss_snap_mode',          'quick_draw');
+        add_option('mfsd_ss_snap_quick_draw_target', 5);
+        add_option('mfsd_ss_snap_timer',         3);
     }
 
-    // ── Seed: all 100 Super Strengths from Appendix D ────────────────────────
+    // ── Seed: 100 Super Strengths ─────────────────────────────────────────────
     public static function seed_strengths() {
         global $wpdb;
         $t = $wpdb->prefix . self::TBL_STRENGTHS;
 
         $strengths = [
-            // Character (15)
             ['Resilient','Character'],         ['Determined','Character'],
             ['Honest','Character'],            ['Brave','Character'],
             ['Patient','Character'],           ['Calm','Character'],
@@ -206,8 +258,6 @@ class MFSD_SS_DB {
             ['Authentic','Character'],         ['Principled','Character'],
             ['Grounded','Character'],          ['Self-aware','Character'],
             ['Courageous','Character'],
-
-            // Social & Caring (15)
             ['Kind','Social & Caring'],            ['Generous','Social & Caring'],
             ['Loyal','Social & Caring'],           ['Supportive','Social & Caring'],
             ['Encouraging','Social & Caring'],     ['Warm','Social & Caring'],
@@ -218,8 +268,6 @@ class MFSD_SS_DB {
             ['Stands up for others','Social & Caring'],
             ['Sees the best in people','Social & Caring'],
             ['Always there for you','Social & Caring'],
-
-            // Creative & Expressive (12)
             ['Creative','Creative & Expressive'],
             ['Imaginative','Creative & Expressive'],
             ['Artistic','Creative & Expressive'],
@@ -232,8 +280,6 @@ class MFSD_SS_DB {
             ['Thinks outside the box','Creative & Expressive'],
             ['Sees things differently','Creative & Expressive'],
             ['Brings ideas to life','Creative & Expressive'],
-
-            // Mind & Learning (13)
             ['Focused','Mind & Learning'],         ['Organised','Mind & Learning'],
             ['Hardworking','Mind & Learning'],      ['Thorough','Mind & Learning'],
             ['Analytical','Mind & Learning'],       ['Wise','Mind & Learning'],
@@ -242,8 +288,6 @@ class MFSD_SS_DB {
             ['Asks great questions','Mind & Learning'],
             ['Never gives up on a challenge','Mind & Learning'],
             ['Pays attention to detail','Mind & Learning'],
-
-            // Leadership & Drive (12)
             ['Confident','Leadership & Drive'],    ['Ambitious','Leadership & Drive'],
             ['Motivated','Leadership & Drive'],    ['Inspiring','Leadership & Drive'],
             ['Decisive','Leadership & Drive'],     ['Responsible','Leadership & Drive'],
@@ -252,8 +296,6 @@ class MFSD_SS_DB {
             ['Leads by example','Leadership & Drive'],
             ['Makes things happen','Leadership & Drive'],
             ['Brings out the best in others','Leadership & Drive'],
-
-            // Practical & Dependable (12)
             ['Practical','Practical & Dependable'],
             ['Resourceful','Practical & Dependable'],
             ['Punctual','Practical & Dependable'],
@@ -266,8 +308,6 @@ class MFSD_SS_DB {
             ['Gets things done','Practical & Dependable'],
             ['You can count on them','Practical & Dependable'],
             ['Always follows through','Practical & Dependable'],
-
-            // Growth & Mindset (9)
             ['Reflective','Growth & Mindset'],
             ['Improving every day','Growth & Mindset'],
             ['Embraces a challenge','Growth & Mindset'],
@@ -277,8 +317,6 @@ class MFSD_SS_DB {
             ['Solution focused','Growth & Mindset'],
             ['Sees the bigger picture','Growth & Mindset'],
             ['Turns setbacks into comebacks','Growth & Mindset'],
-
-            // Family (12)
             ['Loving','Family'],
             ['Funny','Family'],
             ['Makes you laugh','Family'],
@@ -294,21 +332,16 @@ class MFSD_SS_DB {
         ];
 
         foreach ($strengths as [$text, $cat]) {
-            $wpdb->insert($t, [
-                'strength_text' => $text,
-                'category'      => $cat,
-                'active'        => 1,
-            ]);
+            $wpdb->insert($t, ['strength_text' => $text, 'category' => $cat, 'active' => 1]);
         }
     }
 
-    // ── Seed: Appendix E banned terms ────────────────────────────────────────
+    // ── Seed: Banned terms ────────────────────────────────────────────────────
     public static function seed_banned_terms() {
         global $wpdb;
         $t = $wpdb->prefix . self::TBL_BANNED;
 
         $terms = [
-            // Profanity — block
             ['fuck','profanity','block'],      ['shit','profanity','block'],
             ['cunt','profanity','block'],      ['bitch','profanity','block'],
             ['dick','profanity','block'],      ['cock','profanity','block'],
@@ -324,20 +357,16 @@ class MFSD_SS_DB {
             ['fuk','profanity','block'],       ['phuck','profanity','block'],
             ['fcuk','profanity','block'],      ['biatch','profanity','block'],
             ['kunt','profanity','block'],      ['feck','profanity','block'],
-            // Context-dependent — flag for review
             ['bastard','profanity','flag'],    ['tosspot','profanity','flag'],
-            // Violence — block
             ['kill','violence','block'],       ['murder','violence','block'],
             ['stab','violence','block'],       ['shoot','violence','block'],
             ['want you dead','violence','block'],
             ['hate you','violence','flag'],
-            // Sexual — block / flag
             ['naked','sexual','block'],        ['nude','sexual','block'],
             ['penis','sexual','block'],        ['vagina','sexual','block'],
             ['porn','sexual','block'],         ['rape','sexual','block'],
             ['molest','sexual','block'],
             ['sex','sexual','flag'],
-            // Self-harm — flag (not hard block so sensitive support can reach admin)
             ['self-harm','self_harm','flag'],
             ['suicidal','self_harm','flag'],
             ['want to die','self_harm','flag'],
@@ -345,16 +374,10 @@ class MFSD_SS_DB {
         ];
 
         foreach ($terms as [$term, $cat, $action]) {
-            $wpdb->insert($t, [
-                'term'     => $term,
-                'category' => $cat,
-                'action'   => $action,
-                'active'   => 1,
-            ]);
+            $wpdb->insert($t, ['term' => $term, 'category' => $cat, 'action' => $action, 'active' => 1]);
         }
     }
 
-    // ── Helper: full table name with prefix ──────────────────────────────────
     public static function table($slug) {
         global $wpdb;
         return $wpdb->prefix . constant('self::TBL_' . strtoupper($slug));

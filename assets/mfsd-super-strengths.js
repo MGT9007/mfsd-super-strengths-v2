@@ -91,8 +91,7 @@
     const screen = el('div', 'ss-screen');
     screen.appendChild(topBar());
     screen.appendChild(screenEl);
-    const themeClass = cfg.roleHint === 'student' ? 'ss-wrap gamer' : 'ss-wrap corporate';
-    const wrap = el('div', themeClass);
+    const wrap = el('div', 'ss-wrap');
     wrap.appendChild(screen);
     root.replaceChildren(wrap);
   }
@@ -105,7 +104,7 @@
       unload(lv);
 
       if (data.status === 'no_game') {
-        renderNoGame(data.message);
+        renderNoGame(data);
         return;
       }
 
@@ -137,89 +136,194 @@
     switch (state.gameStatus) {
       case 'submission': renderSubmissionIntro(); break;
       case 'dealing':    renderDealing(); break;
-      case 'playing':    renderGameTable(); break;
+      case 'playing':
+        if (state.gameMode === 'snap') renderSnapWaiting();
+        else renderGameTable();
+        break;
       case 'complete':   renderFinalResults(); break;
-      default:           renderNoGame('Unknown game state.');
+      default:           renderNoGame({status:'no_game', message:'Unknown game state.'});
     }
   }
 
   // =========================================================================
-  // NO GAME
+  // NO GAME — smart screen based on viewer_role returned by state
   // =========================================================================
-  function renderNoGame(msg) {
+  function renderNoGame(data) {
     const body = el('div', 'ss-screen-body');
-    const card = el('div', 'ss-card');
-    card.style.textAlign = 'center';
-    card.innerHTML = '<div style="font-size:40px;margin-bottom:12px;">🃏</div>' +
-      '<h2 style="color:#fff;margin:0 0 10px;">Super Strengths Cards</h2>' +
-      '<p style="color:var(--ss-text-dim);font-size:14px;">' + escHtml(msg) + '</p>';
-    body.appendChild(card);
+
+    // ── Student: has linked parents, can start a game ──────────────────────
+    if (data.can_start && data.viewer_role === 'student') {
+      const inner = el('div', '');
+      inner.style.padding = '28px 24px';
+
+      inner.innerHTML = `
+        <div style="text-align:center;margin-bottom:24px;">
+          <div style="font-size:52px;margin-bottom:12px;">🃏</div>
+          <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Super Strengths Cards</h2>
+          <p style="color:var(--ss-text-dim);font-size:14px;margin:0;">A family card game about your strengths</p>
+        </div>
+        <div class="ss-section-label" style="margin-bottom:10px;">Your family players</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+          ${data.linked_parents.map(p =>
+            `<div class="ss-player-pill">
+              <span style="font-size:16px;">${roleEmoji(p.role)}</span>
+              ${escHtml(p.display_name)}
+              <span style="color:var(--ss-text-dim);font-size:11px;">— ${escHtml(p.role)}</span>
+            </div>`
+          ).join('')}
+        </div>
+        <div style="background:rgba(109,63,192,0.1);border:1px solid rgba(109,63,192,0.25);border-radius:8px;padding:14px;margin-bottom:20px;font-size:13px;line-height:1.6;color:var(--ss-text);">
+          When you start the game, your family will be able to log in and write Super Strength cards too. The game begins once everyone has submitted their cards.
+        </div>
+      `;
+
+      const startBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '🚀 Start Game');
+      startBtn.onclick = async () => {
+        startBtn.disabled = true;
+        startBtn.textContent = 'Starting…';
+        const lv = loading('Setting up your game…');
+        try {
+          const result = await api('game/start', 'POST');
+          unload(lv);
+          if (result.ok && result.status !== 'no_game') {
+            // State returned directly — route to the right screen
+            state.gameId     = result.game_id;
+            state.gameStatus = result.status;
+            state.gameMode   = result.game_mode;
+            state.player     = result.player;
+            state.allPlayers = result.all_players || [];
+            await loadStrengths();
+            routeToScreen();
+          } else {
+            unload(lv);
+            renderError(result.message || 'Could not start game. Please try again.');
+          }
+        } catch (e) {
+          unload(lv);
+          startBtn.disabled = false;
+          startBtn.textContent = '🚀 Start Game';
+          renderError(e.message);
+        }
+      };
+      inner.appendChild(startBtn);
+      body.appendChild(inner);
+
+    // ── Parent: waiting for student to start ───────────────────────────────
+    } else if (data.viewer_role === 'parent') {
+      const inner = el('div', '');
+      inner.style.cssText = 'padding:40px 24px;text-align:center;';
+      inner.innerHTML = `
+        <div style="font-size:48px;margin-bottom:16px;">⏳</div>
+        <h2 style="color:#fff;margin:0 0 12px;font-size:20px;">Game Not Started Yet</h2>
+        <p style="color:var(--ss-text-dim);font-size:14px;line-height:1.6;max-width:400px;margin:0 auto 24px;">
+          ${escHtml(data.message)}
+        </p>
+        <div class="ss-waiting" style="justify-content:center;">
+          <div class="ss-dots"><span></span><span></span><span></span></div>
+          Checking for a new game…
+        </div>
+      `;
+      body.appendChild(inner);
+      // Poll every 15s so parent sees the game appear without refreshing
+      startPoll(async () => {
+        try {
+          const fresh = await api('state');
+          if (fresh.status !== 'no_game') {
+            stopPoll();
+            state.gameId     = fresh.game_id;
+            state.gameStatus = fresh.status;
+            state.player     = fresh.player;
+            state.allPlayers = fresh.all_players || [];
+            await loadStrengths();
+            routeToScreen();
+          }
+        } catch(_) {}
+      }, 15000);
+
+    // ── Fallback: no links set up ──────────────────────────────────────────
+    } else {
+      const inner = el('div', '');
+      inner.style.cssText = 'padding:40px 24px;text-align:center;';
+      inner.innerHTML = `
+        <div style="font-size:48px;margin-bottom:16px;">🃏</div>
+        <h2 style="color:#fff;margin:0 0 12px;">Super Strengths Cards</h2>
+        <p style="color:var(--ss-text-dim);font-size:14px;line-height:1.6;">
+          ${escHtml(data.message || 'No active game found.')}
+        </p>
+      `;
+      body.appendChild(inner);
+    }
+
     render(body);
+  }
+
+  function roleEmoji(role) {
+    const map = { student:'🎓', parent:'👨‍👩‍👧', carer:'🤝', sibling:'👫', other:'👤' };
+    return map[role] || '👤';
   }
 
   // =========================================================================
   // SUBMISSION INTRO (ST0 / PC0)
   // =========================================================================
   function renderSubmissionIntro() {
-    const isStudent = cfg.roleHint === 'student';
+    const isStudent = state.player.role === 'student';
     const body = el('div', 'ss-screen-body');
 
+    body.innerHTML = `
+      <div class="ss-game-header">
+        <div class="ss-game-title">🃏 Super Strengths Cards</div>
+        <div class="ss-game-sub">${isStudent ? 'Family Game' : 'You\'ve been invited!'}</div>
+      </div>
+    `;
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+
     if (isStudent) {
-      // ST0 — student entry
-      body.innerHTML = `
-        <div class="ss-game-header">
-          <div class="ss-game-title">🃏 Super Strengths Cards</div>
-          <div class="ss-game-sub">Week 1 · Family Game</div>
-        </div>
-      `;
-      const inner = el('div', '');
-      inner.style.padding = '20px';
+      // ST0 — student sees game rules
       inner.innerHTML = `
         <div class="ss-section-label" style="margin-bottom:12px;">How it works</div>
         <div class="ss-intro-rule"><div class="ss-intro-rule-num">1</div>Write 5 Super Strength cards for each person in your game.</div>
         <div class="ss-intro-rule"><div class="ss-intro-rule-num">2</div>Once everyone submits, cards are dealt and the guessing game begins.</div>
-        <div class="ss-intro-rule"><div class="ss-intro-rule-num">3</div>In each round, one card is played face-up. Everyone guesses who it's about!</div>
+        <div class="ss-intro-rule"><div class="ss-intro-rule-num">3</div>In each round one card is played face-up — everyone guesses who it's about!</div>
         <div class="ss-intro-rule"><div class="ss-intro-rule-num">4</div>Then guess who wrote it. Score points for correct guesses.</div>
         <div class="ss-intro-rule"><div class="ss-intro-rule-num">5</div>Use Confidence Tokens to bet big — right gets you +3, wrong costs you 3!</div>
         <hr class="ss-divider">
-        <div class="ss-section-label" style="margin-bottom:10px;">Your family will be notified to join</div>
+        <div class="ss-section-label" style="margin-bottom:10px;">Players in this game</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">
-          ${state.allPlayers.filter(p => p.id != state.player.id).map(p =>
-            `<div class="ss-player-pill"><span class="status-dot ${p.submission_status === 'submitted' ? 'submitted' : 'pending'}"></span>${escHtml(p.display_name)}</div>`
+          ${state.allPlayers.map(p =>
+            `<div class="ss-player-pill">
+              <span class="status-dot ${p.submission_status === 'submitted' ? 'submitted' : 'pending'}"></span>
+              ${escHtml(p.display_name)}
+              <span style="color:var(--ss-text-dim);font-size:10px;">${p.role === 'student' ? '— you' : ''}</span>
+            </div>`
           ).join('')}
         </div>
       `;
-      const startBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '✍️ Start Writing Cards →');
-      startBtn.onclick = renderSubmissionOverview;
-      inner.appendChild(startBtn);
-      body.appendChild(inner);
     } else {
-      // PC0 — parent/carer entry
-      const submitter = state.allPlayers.find(p => p.role === 'student');
-      body.innerHTML = `
-        <div class="ss-game-header">
-          <div class="ss-game-title">🔴 ${escHtml(submitter ? submitter.display_name : 'Someone')} has started a game!</div>
-        </div>
-      `;
-      const inner = el('div', '');
-      inner.style.padding = '20px';
+      // PC0 — parent/carer invited by student
+      const student = state.allPlayers.find(p => p.role === 'student');
       inner.innerHTML = `
         <div style="background:rgba(201,162,39,0.08);border:1px solid rgba(201,162,39,0.2);border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--ss-text);">
-          You've been invited to write Super Strength cards for your family. Write 5 strengths for each person — they'll be used in the guessing game once everyone submits.
+          <strong style="color:var(--ss-gold-lt);">${escHtml(student ? student.display_name : 'Your student')}</strong>
+          has started a Super Strengths Cards game! Write 5 strength cards for each person — your cards will be used in the guessing game once everyone submits.
         </div>
-        <div class="ss-section-label" style="margin-bottom:10px;">Player status</div>
+        <div class="ss-section-label" style="margin-bottom:10px;">Players in this game</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
           ${state.allPlayers.map(p =>
-            `<div class="ss-player-pill"><span class="status-dot ${p.submission_status === 'submitted' ? 'submitted' : 'pending'}"></span>${escHtml(p.display_name)} <span style="color:var(--ss-text-dim);font-size:10px;">${p.submission_status === 'submitted' ? '— submitted ✓' : '— waiting'}</span></div>`
+            `<div class="ss-player-pill">
+              <span class="status-dot ${p.submission_status === 'submitted' ? 'submitted' : 'pending'}"></span>
+              ${escHtml(p.display_name)}
+              <span style="color:var(--ss-text-dim);font-size:10px;">${p.submission_status === 'submitted' ? '— submitted ✓' : '— waiting'}</span>
+            </div>`
           ).join('')}
         </div>
       `;
-      const startBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '✍️ Write My Super Strength Cards →');
-      startBtn.onclick = renderSubmissionOverview;
-      inner.appendChild(startBtn);
-      body.appendChild(inner);
     }
 
+    const startBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '✍️ Start Writing Cards →');
+    startBtn.onclick = renderSubmissionOverview;
+    inner.appendChild(startBtn);
+    body.appendChild(inner);
     render(body);
   }
 
@@ -1071,8 +1175,416 @@
   }
 
   // =========================================================================
-  // BOOT
+  // SNAP — STATE
   // =========================================================================
-  init();
+  let snapPollTimer = null;
+  let snapBullseye  = null;
+  let snapCountdownTimer = null;
+  let mobileTapCount = 0;
+  let mobileTapTimer = null;
+
+  function stopSnapPoll() {
+    if (snapPollTimer) { clearInterval(snapPollTimer); snapPollTimer = null; }
+  }
+  function startSnapPoll(fn, ms = 500) {
+    stopSnapPoll();
+    snapPollTimer = setInterval(fn, ms);
+  }
+
+  function isMobile() {
+    return cfg.isMobileHint || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  }
+
+  // =========================================================================
+  // SNAP — WAITING ROOM
+  // Shown immediately when snap game mode is detected.
+  // Each player calls /snap/join which marks them present.
+  // When all present → server triggers 3-2-1 countdown.
+  // =========================================================================
+  async function renderSnapWaiting() {
+    stopPoll();
+    // Mark wrap so corporate users get gamer styling during snap (per style guide)
+    document.querySelector('.ss-wrap')?.classList.add('ss-snap-mode');
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = `
+      <div class="ss-snap-header">
+        <div class="ss-snap-title">🃏 Super Strengths Snap</div>
+        <div class="ss-snap-sub">Waiting for all players to join…</div>
+      </div>
+      <div style="padding:20px;">
+        <div class="ss-section-label" style="margin-bottom:12px;">Players joining</div>
+        <div id="ss-snap-waiting-players" class="ss-snap-players-grid"></div>
+        <div class="ss-snap-info-box" style="margin-top:20px;">
+          All players need to be on this page at the same time before the game can start.
+          Share the link with your family!
+        </div>
+      </div>
+    `;
+    render(body);
+
+    // Signal to server that this player is present
+    try {
+      await api('snap/join', 'POST', { game_id: state.gameId });
+    } catch(e) { /* already joined */ }
+
+    // Poll until all joined and countdown starts
+    startSnapPoll(async () => {
+      try {
+        const data = await api(`snap/session?game_id=${state.gameId}`);
+        updateWaitingPlayers(data);
+        if (data.status === 'countdown') {
+          stopSnapPoll();
+          renderSnapCountdown(data);
+        }
+      } catch(e) {}
+    }, 1500);
+  }
+
+  function updateWaitingPlayers(data) {
+    const grid = document.getElementById('ss-snap-waiting-players');
+    if (!grid) return;
+    grid.innerHTML = (data.players || []).map(p => `
+      <div class="ss-snap-player-pill ${p.is_present ? 'present' : 'waiting'}">
+        <span class="ss-snap-presence-dot"></span>
+        <span>${escHtml(p.display_name)}</span>
+        <span class="ss-snap-role">${p.is_present ? '✓ Ready' : '⏳ Joining…'}</span>
+      </div>
+    `).join('');
+  }
+
+  // =========================================================================
+  // SNAP — COUNTDOWN (3-2-1)
+  // =========================================================================
+  function renderSnapCountdown(data) {
+    stopPoll();
+    if (snapCountdownTimer) { clearInterval(snapCountdownTimer); }
+
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = `
+      <div class="ss-snap-header">
+        <div class="ss-snap-title">🃏 Super Strengths Snap</div>
+      </div>
+      <div class="ss-snap-countdown-wrap">
+        <div id="ss-snap-count-num" class="ss-snap-countdown-num">3</div>
+        <div class="ss-snap-countdown-label">Get ready!</div>
+      </div>
+    `;
+    render(body);
+
+    const endsAt = new Date(data.countdown_ends_at.replace(' ','T') + 'Z');
+    snapCountdownTimer = setInterval(() => {
+      const remaining = Math.ceil((endsAt - Date.now()) / 1000);
+      const numEl = document.getElementById('ss-snap-count-num');
+      if (numEl) numEl.textContent = Math.max(0, remaining);
+      if (remaining <= 0) {
+        clearInterval(snapCountdownTimer);
+        renderSnapGame({});
+      }
+    }, 200);
+  }
+
+  // =========================================================================
+  // SNAP — MAIN GAME SCREEN
+  // =========================================================================
+  async function renderSnapGame(initial) {
+    stopPoll();
+    stopSnapPoll();
+
+    const body = el('div', 'ss-screen-body ss-snap-game-body');
+    body.innerHTML = `
+      <div class="ss-snap-scoreboard" id="ss-snap-scoreboard"></div>
+      <div class="ss-snap-arena" id="ss-snap-arena">
+        <div class="ss-snap-hands-row" id="ss-snap-hands-row"></div>
+        <div class="ss-snap-pile-area" id="ss-snap-pile-area">
+          <div class="ss-snap-pile" id="ss-snap-pile"></div>
+          <div class="ss-snap-pile-label" id="ss-snap-pile-label"></div>
+        </div>
+        <div class="ss-snap-action-area" id="ss-snap-action-area"></div>
+      </div>
+      <div class="ss-snap-status" id="ss-snap-status"></div>
+      <div id="ss-snap-bullseye-container" class="ss-snap-bullseye-container"></div>
+    `;
+    render(body);
+
+    // Create bullseye overlay
+    createBullseye();
+
+    // Initial state load + then poll
+    await refreshSnapGame();
+    startSnapPoll(refreshSnapGame, 500);
+  }
+
+  async function refreshSnapGame() {
+    try {
+      const data = await api(`snap/session?game_id=${state.gameId}`);
+      updateSnapGame(data);
+      if (data.status === 'complete') {
+        stopSnapPoll();
+        setTimeout(() => renderSnapComplete(data), 600);
+      }
+    } catch(e) {}
+  }
+
+  function updateSnapGame(data) {
+    updateSnapScoreboard(data);
+    updateSnapHands(data);
+    updateSnapPile(data);
+    updateSnapAction(data);
+    updateSnapBullseye(data);
+  }
+
+  function updateSnapScoreboard(data) {
+    const el2 = document.getElementById('ss-snap-scoreboard');
+    if (!el2) return;
+    const mode = data.snap_mode === 'quick_draw'
+      ? `Quick Draw — first to ${data.quick_draw_target} snap${data.quick_draw_target !== 1 ? 's' : ''}`
+      : 'Until the Death';
+    el2.innerHTML = `
+      <div class="ss-snap-mode-label">${escHtml(mode)}</div>
+      <div class="ss-snap-scores">
+        ${(data.players || []).map(p => `
+          <div class="ss-snap-score-pill ${p.is_me ? 'me' : ''}">
+            <span class="ss-snap-score-name">${escHtml(p.display_name)}</span>
+            <span class="ss-snap-score-pts">${p.snap_score} 🃏</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function updateSnapHands(data) {
+    const row = document.getElementById('ss-snap-hands-row');
+    if (!row) return;
+    row.innerHTML = (data.players || []).map(p => `
+      <div class="ss-snap-hand-block ${p.is_me ? 'me' : ''}">
+        <div class="ss-snap-hand-count">${p.hand_count}</div>
+        <div class="ss-snap-hand-cards">
+          ${Array.from({length: Math.min(p.hand_count, 5)}).map(() =>
+            `<div class="ss-snap-mini-card"></div>`
+          ).join('')}
+        </div>
+        <div class="ss-snap-hand-name">${escHtml(p.display_name)}</div>
+      </div>
+    `).join('');
+  }
+
+  function updateSnapPile(data) {
+    const pile    = document.getElementById('ss-snap-pile');
+    const pileLabel = document.getElementById('ss-snap-pile-label');
+    if (!pile) return;
+
+    if (data.pile_top) {
+      pile.innerHTML = `
+        <div class="ss-snap-card ss-snap-card-face-up">
+          <div class="ss-snap-card-suit tl">♦</div>
+          <div class="ss-snap-card-text">${escHtml(data.pile_top.strength_text)}</div>
+          <div class="ss-snap-card-suit br">♦</div>
+        </div>
+      `;
+      if (data.pile_count > 1) {
+        pile.insertAdjacentHTML('afterbegin',
+          `<div class="ss-snap-card ss-snap-card-behind"></div>`);
+      }
+      if (pileLabel) pileLabel.textContent = data.pile_count > 1
+        ? `${data.pile_count} cards in pile`
+        : '1 card';
+    } else {
+      pile.innerHTML = `<div class="ss-snap-pile-empty">Play a card to start</div>`;
+      if (pileLabel) pileLabel.textContent = '';
+    }
+  }
+
+  function updateSnapAction(data) {
+    const area   = document.getElementById('ss-snap-action-area');
+    const status = document.getElementById('ss-snap-status');
+    if (!area) return;
+
+    const myData = (data.players || []).find(p => p.is_me);
+    const isMyTurn = data.current_turn_player_id === data.player_id;
+    const snapActive = data.snap_active;
+    const currentName = (data.players || []).find(p => p.player_id === data.current_turn_player_id)?.display_name || 'Someone';
+
+    if (snapActive) {
+      // Snap is active — show snap instruction, not play button
+      area.innerHTML = `
+        <div class="ss-snap-match-banner">
+          🎯 MATCH! ${isMobile() ? 'Double-tap the bullseye!' : 'Right-click the bullseye!'}
+        </div>
+      `;
+      if (status) status.innerHTML = '';
+    } else if (isMyTurn && myData && myData.hand_count > 0) {
+      area.innerHTML = `
+        <button class="ss-snap-play-btn" id="ss-snap-play-btn">
+          ${isMobile() ? '👆 Tap to play card' : '▶ Play Card'}
+        </button>
+      `;
+      if (status) status.textContent = "It's your turn — play a card!";
+      document.getElementById('ss-snap-play-btn')?.addEventListener('click', snapPlayCard);
+    } else if (isMyTurn && myData && myData.hand_count === 0) {
+      area.innerHTML = `<div class="ss-snap-waiting-msg">You have no cards — waiting for a snap!</div>`;
+      if (status) status.textContent = '';
+    } else {
+      area.innerHTML = `<div class="ss-snap-waiting-msg">⏳ Waiting for ${escHtml(currentName)} to play…</div>`;
+      if (status) status.textContent = '';
+    }
+  }
+
+  // =========================================================================
+  // SNAP — BULLSEYE SYSTEM
+  // =========================================================================
+  function createBullseye() {
+    const container = document.getElementById('ss-snap-bullseye-container');
+    if (!container) return;
+
+    snapBullseye = document.createElement('div');
+    snapBullseye.id = 'ss-snap-bullseye';
+    snapBullseye.className = 'ss-snap-bullseye hidden';
+    snapBullseye.innerHTML = `
+      <div class="ss-snap-bullseye-ring outer"></div>
+      <div class="ss-snap-bullseye-ring middle"></div>
+      <div class="ss-snap-bullseye-inner">
+        <div class="ss-snap-bullseye-word">SNAP!</div>
+        <div class="ss-snap-bullseye-timer" id="ss-snap-bullseye-timer"></div>
+      </div>
+    `;
+
+    // Desktop: right-click to claim
+    snapBullseye.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (!snapBullseye.classList.contains('hidden')) claimSnap();
+    });
+
+    // Mobile: double-tap within 1 second to claim
+    if (isMobile()) {
+      snapBullseye.addEventListener('click', () => {
+        mobileTapCount++;
+        if (mobileTapCount === 1) {
+          snapBullseye.classList.add('tapped-once');
+          mobileTapTimer = setTimeout(() => {
+            mobileTapCount = 0;
+            snapBullseye.classList.remove('tapped-once');
+          }, 1000);
+        } else if (mobileTapCount >= 2) {
+          clearTimeout(mobileTapTimer);
+          mobileTapCount = 0;
+          snapBullseye.classList.remove('tapped-once');
+          claimSnap();
+        }
+      });
+    }
+
+    container.appendChild(snapBullseye);
+  }
+
+  function updateSnapBullseye(data) {
+    if (!snapBullseye) return;
+
+    if (data.snap_active && data.snap_x !== null) {
+      // Position bullseye at server-specified random location
+      snapBullseye.style.left = data.snap_x + '%';
+      snapBullseye.style.top  = data.snap_y + '%';
+      snapBullseye.classList.remove('hidden');
+      if (data.is_tiebreaker) snapBullseye.classList.add('tiebreaker');
+      else snapBullseye.classList.remove('tiebreaker');
+
+      // Client-side countdown display
+      if (data.snap_expires_at) {
+        const expiresAt = new Date(data.snap_expires_at.replace(' ','T') + 'Z');
+        const timerEl = document.getElementById('ss-snap-bullseye-timer');
+        if (timerEl) {
+          const remaining = Math.max(0, (expiresAt - Date.now()) / 1000);
+          timerEl.textContent = remaining.toFixed(1) + 's';
+        }
+      }
+    } else {
+      snapBullseye.classList.add('hidden');
+      mobileTapCount = 0;
+    }
+  }
+
+  // =========================================================================
+  // SNAP — PLAY CARD
+  // =========================================================================
+  async function snapPlayCard() {
+    const btn = document.getElementById('ss-snap-play-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Playing…'; }
+    try {
+      await api('snap/play-card', 'POST', { game_id: state.gameId });
+      // Poll will pick up new state immediately
+    } catch(e) {
+      if (btn) { btn.disabled = false; btn.textContent = isMobile() ? '👆 Tap to play card' : '▶ Play Card'; }
+    }
+  }
+
+  // =========================================================================
+  // SNAP — CLAIM SNAP
+  // =========================================================================
+  async function claimSnap() {
+    if (!snapBullseye || snapBullseye.classList.contains('hidden')) return;
+    snapBullseye.classList.add('claiming');
+    try {
+      const data = await api('snap/claim', 'POST', { game_id: state.gameId });
+      // Show win flash
+      showSnapResult(data);
+    } catch(e) {
+      snapBullseye.classList.remove('claiming');
+    }
+  }
+
+  function showSnapResult(data) {
+    const myData  = (data.players || []).find(p => p.is_me);
+    const winner  = (data.players || []).find(p => p.player_id === data.last_snap_winner_id);
+    const iWon    = myData && data.last_snap_winner_id === data.player_id;
+
+    const flash = document.createElement('div');
+    flash.className = 'ss-snap-result-flash ' + (iWon ? 'win' : 'lose');
+    flash.innerHTML = iWon
+      ? `<div class="ss-snap-flash-text">⚡ SNAP! You got it!</div>`
+      : `<div class="ss-snap-flash-text">⚡ ${escHtml(winner?.display_name || 'Someone')} snapped it!</div>`;
+
+    const arena = document.getElementById('ss-snap-arena');
+    if (arena) arena.appendChild(flash);
+    setTimeout(() => flash.remove(), 2000);
+  }
+
+  // =========================================================================
+  // SNAP — COMPLETE / RESULTS
+  // =========================================================================
+  function renderSnapComplete(data) {
+    stopSnapPoll();
+    if (snapBullseye) snapBullseye.classList.add('hidden');
+    // Restore role-appropriate theme styling now snap is over
+    document.querySelector('.ss-wrap')?.classList.remove('ss-snap-mode');
+
+    const winner = (data.players || []).find(p => p.player_id === data.winner_player_id);
+    const iWon   = data.winner_player_id === data.player_id;
+    const sorted = [...(data.players || [])].sort((a,b) => b.snap_score - a.snap_score);
+
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = `
+      <div class="ss-snap-header">
+        <div class="ss-snap-title">${iWon ? '🏆 You Won!' : '🎉 Game Over!'}</div>
+        <div class="ss-snap-sub">${iWon ? 'Amazing snapping!' : `${escHtml(winner?.display_name || 'Someone')} wins!`}</div>
+      </div>
+      <div style="padding:20px;">
+        <div class="ss-section-label" style="margin-bottom:12px;">Final Scores</div>
+        <div class="ss-snap-final-scores">
+          ${sorted.map((p, i) => `
+            <div class="ss-snap-final-row ${p.is_me ? 'me' : ''} ${i === 0 ? 'winner' : ''}">
+              <span class="ss-snap-final-pos">${i === 0 ? '🏆' : (i+1)}</span>
+              <span class="ss-snap-final-name">${escHtml(p.display_name)}</span>
+              <span class="ss-snap-final-score">${p.snap_score} snap${p.snap_score !== 1 ? 's' : ''}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="ss-snap-info-box" style="margin-top:20px;text-align:center;">
+          Want to play again? Ask your teacher or parent to start a new game.
+        </div>
+      </div>
+    `;
+    render(body);
+  }
+
+  // =========================================================================
 
 })();

@@ -24,26 +24,6 @@ $notice = '';
 // HANDLE POST ACTIONS
 // =============================================================================
 
-// ── Save course management settings ──────────────────────────────────────────
-if (isset($_POST['ss_save_cm']) && check_admin_referer('mfsd_ss_cm')) {
-    update_option('mfsd_ss_course_management', isset($_POST['course_management']) ? '1' : '0');
-    $notice = ['success', 'Course management settings saved.'];
-}
-
-// ── Reset student ordering progress ──────────────────────────────────────────
-if (isset($_POST['ss_reset_cm_student']) && check_admin_referer('mfsd_ss_cm_reset')) {
-    $reset_uid = (int)($_POST['reset_user_id'] ?? 0);
-    if ($reset_uid > 0) {
-        $wpdb->delete(
-            $wpdb->prefix . 'mfsd_task_progress',
-            ['student_id' => $reset_uid, 'task_slug' => 'super_strengths']
-        );
-        $u    = get_user_by('id', $reset_uid);
-        $name = $u ? $u->display_name : 'Student';
-        $notice = ['success', esc_html($name) . '\'s Super Strengths ordering progress has been reset.'];
-    }
-}
-
 // ── Save configuration ────────────────────────────────────────────────────────
 if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
     update_option('mfsd_ss_mode',              sanitize_text_field($_POST['game_mode'] ?? 'full'));
@@ -55,6 +35,9 @@ if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
     update_option('mfsd_ss_free_text_max',     max(1, min(5, (int)($_POST['ft_max'] ?? 2))));
     update_option('mfsd_ss_free_text_min_len', max(2, (int)($_POST['ft_min_len'] ?? 3)));
     update_option('mfsd_ss_free_text_max_len', min(80, (int)($_POST['ft_max_len'] ?? 40)));
+    update_option('mfsd_ss_snap_mode',         sanitize_text_field($_POST['snap_mode'] ?? 'quick_draw'));
+    update_option('mfsd_ss_snap_quick_draw_target', max(1, (int)($_POST['snap_quick_draw_target'] ?? 5)));
+    update_option('mfsd_ss_snap_timer',        max(1, min(10, (int)($_POST['snap_timer'] ?? 3))));
     $notice = ['success', 'Configuration saved.'];
 }
 
@@ -338,7 +321,6 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                 <span class="awaiting-mod" style="margin-left:4px;"><?php echo $pending_flags; ?></span>
             <?php endif; ?>
         </button>
-        <button class="ss-tab-btn" data-tab="cm">📋 Course Management</button>
     </div>
 
     <!-- ===================================================================
@@ -363,11 +345,38 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                     <th scope="row">Game Mode</th>
                     <td>
                         <label><input type="radio" name="game_mode" value="full" <?php checked(get_option('mfsd_ss_mode','full'),'full'); ?>>
-                            <strong>Full Mode</strong> — Phase A (guess target) + Phase B (guess author)</label><br>
-                        <br>
+                            <strong>Extended</strong> — Phase A (guess target) + Phase B (guess author)</label><br><br>
                         <label><input type="radio" name="game_mode" value="short" <?php checked(get_option('mfsd_ss_mode','full'),'short'); ?>>
-                            <strong>Short Mode</strong> — Phase A only (guess target)</label>
-                        <p class="description">Full mode is recommended for families; Short mode suits younger groups.</p>
+                            <strong>Family Short</strong> — Phase A only (guess target)</label><br><br>
+                        <label><input type="radio" name="game_mode" value="snap" <?php checked(get_option('mfsd_ss_mode','full'),'snap'); ?>>
+                            <strong>Snap</strong> — Real-time Super Strengths Snap card game (2–6 players, all must be online)</label>
+                        <p class="description">Extended is recommended for families. Snap requires all players to be online simultaneously.</p>
+                    </td>
+                </tr>
+
+                <tr id="ss-snap-settings-row" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
+                    <th scope="row" style="padding-left:30px;">↳ Snap sub-mode</th>
+                    <td>
+                        <label><input type="radio" name="snap_mode" value="quick_draw" <?php checked(get_option('mfsd_ss_snap_mode','quick_draw'),'quick_draw'); ?>>
+                            <strong>Quick Draw</strong> — Fixed number of snaps; player with most wins at the end wins</label><br><br>
+                        <label><input type="radio" name="snap_mode" value="until_death" <?php checked(get_option('mfsd_ss_snap_mode','quick_draw'),'until_death'); ?>>
+                            <strong>Until the Death</strong> — Play until all cards have been snapped; player with most snaps wins</label>
+                    </td>
+                </tr>
+
+                <tr id="ss-snap-qd-row" style="<?php echo (get_option('mfsd_ss_mode') === 'snap' && get_option('mfsd_ss_snap_mode') === 'quick_draw') ? '' : 'display:none'; ?>">
+                    <th scope="row" style="padding-left:30px;">↳ Quick Draw target snaps</th>
+                    <td>
+                        <input type="number" name="snap_quick_draw_target" value="<?php echo (int) get_option('mfsd_ss_snap_quick_draw_target', 5); ?>" min="1" max="30" class="small-text">
+                        <p class="description">Number of snaps before the game ends. Default: 5. Max possible snaps = (n−1)×5 pairs.</p>
+                    </td>
+                </tr>
+
+                <tr id="ss-snap-timer-row" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
+                    <th scope="row" style="padding-left:30px;">↳ Snap timer (seconds)</th>
+                    <td>
+                        <input type="number" name="snap_timer" value="<?php echo (int) get_option('mfsd_ss_snap_timer', 3); ?>" min="1" max="10" class="small-text">
+                        <p class="description">How long the snap bullseye is visible after a match. Default: 3 seconds. Tiebreaker always uses 5 seconds.</p>
                     </td>
                 </tr>
 
@@ -785,177 +794,35 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
         <?php endif; ?>
     </div>
 
-    <!-- ===================================================================
-         TAB: COURSE MANAGEMENT
-         =================================================================== -->
-    <div id="ss-tab-cm" class="ss-tab-content">
-        <h2>Course Management</h2>
-
-        <?php if (!function_exists('mfsd_get_task_status')): ?>
-        <div class="ss-warn-box">
-            ⚠️ <strong>MFSD Ordering Utility plugin is not active.</strong>
-            Course management features will not function until it is activated.
-        </div>
-        <?php endif; ?>
-
-        <!-- Settings -->
-        <h3>Settings</h3>
-        <form method="post" style="background:#f9f9f9;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:24px;">
-            <?php wp_nonce_field('mfsd_ss_cm'); ?>
-            <input type="hidden" name="ss_save_cm" value="1">
-
-            <table class="form-table"><tbody>
-                <tr>
-                    <th scope="row">Course Management</th>
-                    <td>
-                        <label>
-                            <input type="checkbox" name="course_management" value="1"
-                                   <?php checked(get_option('mfsd_ss_course_management', '1'), '1'); ?>>
-                            <strong>Enable course ordering &amp; completion tracking</strong>
-                        </label>
-                        <p class="description">
-                            <strong>When on:</strong> The plugin checks whether the student has completed
-                            all prerequisite tasks before allowing access. Progress is tracked as
-                            <em>in_progress</em> (on card submission) and <em>completed</em>
-                            (on viewing final results when the game is complete).<br>
-                            <strong>When off:</strong> Ordering logic is bypassed entirely — the plugin
-                            loads normally for all logged-in students. Useful for testing and game setup
-                            without affecting student progress records.
-                        </p>
-                    </td>
-                </tr>
-            </tbody></table>
-
-            <p class="submit"><input type="submit" class="button-primary" value="Save Settings"></p>
-        </form>
-
-        <!-- Student ordering status -->
-        <h3>Student Ordering Status</h3>
-        <p class="description">
-            Shows all students who have an ordering progress record for Super Strengths.
-            Game data is managed separately in the <strong>Games</strong> tab.
-        </p>
-        <?php
-        $cm_students = [];
-        if (function_exists('mfsd_get_task_order_row')) {
-            $cm_students = $wpdb->get_results(
-                "SELECT p.student_id, p.status, p.started_date, p.completed_date,
-                        u.display_name
-                 FROM   {$wpdb->prefix}mfsd_task_progress p
-                 JOIN   {$wpdb->users} u ON u.ID = p.student_id
-                 WHERE  p.task_slug = 'super_strengths'
-                 ORDER  BY u.display_name ASC",
-                ARRAY_A
-            );
-        }
-        ?>
-        <?php if (empty($cm_students)): ?>
-            <p style="color:#999;">No students have ordering progress records for Super Strengths yet.</p>
-        <?php else: ?>
-            <table class="ss-table" style="max-width:700px;">
-                <thead>
-                    <tr>
-                        <th>Student</th>
-                        <th>Ordering Status</th>
-                        <th>Started</th>
-                        <th>Completed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($cm_students as $s): ?>
-                <tr>
-                    <td><strong><?php echo esc_html($s['display_name']); ?></strong></td>
-                    <td>
-                        <span class="ss-badge <?php
-                            echo $s['status'] === 'completed'   ? 'ss-badge-active'
-                               : ($s['status'] === 'in_progress' ? 'ss-badge-flag' : 'ss-badge-inactive');
-                        ?>">
-                            <?php echo esc_html($s['status']); ?>
-                        </span>
-                    </td>
-                    <td style="font-size:12px;color:#666;"><?php echo $s['started_date'] ? esc_html(substr($s['started_date'],0,10)) : '—'; ?></td>
-                    <td style="font-size:12px;color:#666;"><?php echo $s['completed_date'] ? esc_html(substr($s['completed_date'],0,10)) : '—'; ?></td>
-                </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php endif; ?>
-
-        <!-- Reset ordering progress -->
-        <h3 style="margin-top:28px;">Reset Student Ordering Progress</h3>
-        <p class="description">
-            Resets a student's ordering progress record back to <em>not started</em>.
-            This does <strong>not</strong> affect their game data — use the <strong>Games</strong>
-            tab to reset game data separately.
-        </p>
-        <?php
-        $students_with_role = get_users(['role' => 'student', 'orderby' => 'display_name']);
-        ?>
-        <?php if (empty($students_with_role) && empty($cm_students)): ?>
-            <p style="color:#999;">No students found.</p>
-        <?php else: ?>
-        <form method="post"
-              onsubmit="return confirm('Reset ordering progress for this student? Their game data will not be affected.');">
-            <?php wp_nonce_field('mfsd_ss_cm_reset'); ?>
-            <input type="hidden" name="ss_reset_cm_student" value="1">
-
-            <table class="form-table"><tbody>
-                <tr>
-                    <th scope="row"><label for="reset_user_id">Select Student</label></th>
-                    <td>
-                        <select name="reset_user_id" id="reset_user_id" style="min-width:260px;">
-                            <option value="">— select a student —</option>
-                            <?php
-                            // Prefer students with existing ordering records; fall back to all students
-                            $display_list = !empty($cm_students) ? $cm_students : [];
-                            $shown_ids    = [];
-                            foreach ($display_list as $s):
-                                $shown_ids[] = $s['student_id'];
-                            ?>
-                                <option value="<?php echo esc_attr($s['student_id']); ?>">
-                                    <?php echo esc_html($s['display_name']); ?>
-                                    (<?php echo esc_html($s['status']); ?>)
-                                </option>
-                            <?php endforeach; ?>
-                            <?php
-                            // Show all students who have no ordering record yet (so admin can still add for edge cases)
-                            foreach ($students_with_role as $u):
-                                if (in_array($u->ID, $shown_ids)) continue;
-                            ?>
-                                <option value="<?php echo esc_attr($u->ID); ?>">
-                                    <?php echo esc_html($u->display_name); ?> (no record)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </td>
-                </tr>
-            </tbody></table>
-
-            <p class="submit">
-                <input type="submit" class="button button-secondary"
-                       value="Reset Ordering Progress"
-                       style="color:#d63638;border-color:#d63638;">
-            </p>
-        </form>
-        <?php endif; ?>
-    </div>
-
 </div><!-- .wrap -->
 
 <script>
 // Tab switcher
 document.querySelectorAll('.ss-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.ss-tab-content').forEach(t => {
-            t.classList.remove('active');
-        });
-        document.querySelectorAll('.ss-tab-btn').forEach(b => {
-            b.classList.remove('active');
-        });
+        document.querySelectorAll('.ss-tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.ss-tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('ss-tab-' + btn.dataset.tab).classList.add('active');
         btn.classList.add('active');
     });
 });
+
+// Show/hide snap settings based on game mode selection
+function updateSnapRows() {
+    const mode = document.querySelector('input[name="game_mode"]:checked')?.value;
+    const snapRows = ['ss-snap-settings-row','ss-snap-timer-row'];
+    snapRows.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = (mode === 'snap') ? '' : 'none';
+    });
+    const qdRow = document.getElementById('ss-snap-qd-row');
+    if (qdRow) {
+        const subMode = document.querySelector('input[name="snap_mode"]:checked')?.value;
+        qdRow.style.display = (mode === 'snap' && subMode === 'quick_draw') ? '' : 'none';
+    }
+}
+document.querySelectorAll('input[name="game_mode"]').forEach(r => r.addEventListener('change', updateSnapRows));
+document.querySelectorAll('input[name="snap_mode"]').forEach(r => r.addEventListener('change', updateSnapRows));
 
 // Round limit hint updater
 const rlInput = document.getElementById('ss-round-limit');
