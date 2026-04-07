@@ -5,9 +5,10 @@
 (function () {
   'use strict';
 
-  const cfg  = window.MFSD_SS_CFG || {};
-  const root = document.getElementById('mfsd-ss-root');
-  if (!root) return;
+  function boot() {
+    const cfg  = window.MFSD_SS_CFG || {};
+    const root = document.getElementById('mfsd-ss-root');
+    if (!root) return;
 
   // ---- State ----------------------------------------------------------------
   let state = {
@@ -1586,5 +1587,13 @@
   }
 
   // =========================================================================
+
+  } // end boot()
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot(); // DOM already ready
+  }
 
 })();
