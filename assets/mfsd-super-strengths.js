@@ -268,26 +268,38 @@
   // =========================================================================
   function renderSubmissionIntro() {
     const isStudent = state.player.role === 'student';
+    const isSnap    = state.gameMode === 'snap';
     const body = el('div', 'ss-screen-body');
 
     body.innerHTML = `
       <div class="ss-game-header">
-        <div class="ss-game-title">🃏 Super Strengths Cards</div>
-        <div class="ss-game-sub">${isStudent ? 'Family Game' : 'You\'ve been invited!'}</div>
+        <div class="ss-game-title">${isSnap ? '🎯 Super Strengths Snap' : '🃏 Super Strengths Cards'}</div>
+        <div class="ss-game-sub">${isStudent ? (isSnap ? 'Snap Mode' : 'Family Game') : 'You\'ve been invited!'}</div>
       </div>
     `;
     const inner = el('div', '');
     inner.style.padding = '20px';
 
     if (isStudent) {
-      // ST0 — student sees game rules
+      const rules = isSnap ? [
+        'Write 5 Super Strength cards for each person in your game — same as always.',
+        'Once everyone submits, all cards are doubled to create matched pairs and dealt out.',
+        'All players must be online at the same time — a 3-2-1 countdown starts when everyone joins.',
+        'Take turns playing cards face-up onto the pile. Spot a matching pair — hit SNAP!',
+        'On desktop: right-click the bullseye. On mobile: double-tap it. First to claim wins the point!',
+      ] : [
+        'Write 5 Super Strength cards for each person in your game.',
+        'Once everyone submits, cards are dealt and the guessing game begins.',
+        'In each round one card is played face-up — everyone guesses who it\'s about!',
+        'Then guess who wrote it. Score points for correct guesses.',
+        'Use Confidence Tokens to bet big — right gets you +3, wrong costs you 3!',
+      ];
+
       inner.innerHTML = `
         <div class="ss-section-label" style="margin-bottom:12px;">How it works</div>
-        <div class="ss-intro-rule"><div class="ss-intro-rule-num">1</div>Write 5 Super Strength cards for each person in your game.</div>
-        <div class="ss-intro-rule"><div class="ss-intro-rule-num">2</div>Once everyone submits, cards are dealt and the guessing game begins.</div>
-        <div class="ss-intro-rule"><div class="ss-intro-rule-num">3</div>In each round one card is played face-up — everyone guesses who it's about!</div>
-        <div class="ss-intro-rule"><div class="ss-intro-rule-num">4</div>Then guess who wrote it. Score points for correct guesses.</div>
-        <div class="ss-intro-rule"><div class="ss-intro-rule-num">5</div>Use Confidence Tokens to bet big — right gets you +3, wrong costs you 3!</div>
+        ${rules.map((r, i) =>
+          `<div class="ss-intro-rule"><div class="ss-intro-rule-num">${i+1}</div>${r}</div>`
+        ).join('')}
         <hr class="ss-divider">
         <div class="ss-section-label" style="margin-bottom:10px;">Players in this game</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">
@@ -301,12 +313,14 @@
         </div>
       `;
     } else {
-      // PC0 — parent/carer invited by student
       const student = state.allPlayers.find(p => p.role === 'student');
+      const gameDesc = isSnap
+        ? 'has started a Super Strengths Snap game! Write 5 strength cards for each person — everyone needs to be online at the same time to play.'
+        : 'has started a Super Strengths Cards game! Write 5 strength cards for each person — your cards will be used in the guessing game once everyone submits.';
       inner.innerHTML = `
         <div style="background:rgba(201,162,39,0.08);border:1px solid rgba(201,162,39,0.2);border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--ss-text);">
           <strong style="color:var(--ss-gold-lt);">${escHtml(student ? student.display_name : 'Your student')}</strong>
-          has started a Super Strengths Cards game! Write 5 strength cards for each person — your cards will be used in the guessing game once everyone submits.
+          ${gameDesc}
         </div>
         <div class="ss-section-label" style="margin-bottom:10px;">Players in this game</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
@@ -898,8 +912,10 @@
     // Hand display (all 5 slots, face-down = played)
     const handEl = el('div', 'ss-hand');
     state.hand.forEach(card => {
-      const c = el('div', 'ss-hand-card' + (card.played ? ' played' : '') + (state.selectedCard?.id == card.id ? ' selected' : ''));
-      if (!card.played) {
+      const isPlayed = card.played == 1; // DB returns string "0"/"1" — use == not truthy check
+      const isSelected = state.selectedCard?.id == card.id;
+      const c = el('div', 'ss-hand-card' + (isPlayed ? ' played' : '') + (isSelected ? ' selected' : ''));
+      if (!isPlayed) {
         const txt = el('div', 'ss-hand-card-text', card.strength_text);
         const about = el('div', 'ss-hand-card-about', 'about ' + (card.target_name || '?'));
         c.appendChild(txt);

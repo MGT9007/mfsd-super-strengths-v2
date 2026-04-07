@@ -20,7 +20,7 @@ class MFSD_SS_Game {
         $gp = $wpdb->prefix . MFSD_SS_DB::TBL_GAMES;
 
         $players = $wpdb->get_results($wpdb->prepare(
-            "SELECT id FROM $pp WHERE game_id = %d", $game_id
+            "SELECT id, role FROM $pp WHERE game_id = %d", $game_id
         ), ARRAY_A);
 
         $n         = count($players);
@@ -31,8 +31,15 @@ class MFSD_SS_Game {
         ));
         shuffle($all_card_ids);
 
-        $player_ids = array_column($players, 'id');
-        shuffle($player_ids);
+        // Student always plays first — shuffle the rest randomly
+        $student_id = null;
+        $other_ids  = [];
+        foreach ($players as $pl) {
+            if ($pl['role'] === 'student') $student_id = (int)$pl['id'];
+            else $other_ids[] = (int)$pl['id'];
+        }
+        shuffle($other_ids);
+        $player_ids = $student_id ? array_merge([$student_id], $other_ids) : $other_ids;
 
         foreach ($player_ids as $order => $pid) {
             $wpdb->update($pp, ['turn_order' => $order + 1], ['id' => $pid]);

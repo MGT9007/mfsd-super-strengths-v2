@@ -263,7 +263,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
 /* Face-down card (played slot) */
 .ss-hand-card {
   background: var(--ss-surface);
-  border: 1px solid var(--ss-border);
+  border: 2px solid var(--ss-accent);
   border-radius: 10px;
   padding: 10px 8px;
   text-align: center;
@@ -278,6 +278,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   gap: 4px;
   color: var(--ss-text);
   user-select: none;
+  touch-action: manipulation;
 }
 .ss-hand-card:hover:not(.played) {
   border-color: var(--ss-gold);
@@ -286,7 +287,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
 }
 .ss-hand-card.selected {
   border-color: var(--ss-gold);
-  background: var(--ss-card);
+  border-width: 2px;
   transform: translateY(-8px);
   box-shadow: 0 10px 24px rgba(0,0,0,0.4);
 }
