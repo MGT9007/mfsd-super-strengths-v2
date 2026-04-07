@@ -1228,8 +1228,23 @@
   // =========================================================================
   async function renderSnapWaiting() {
     stopPoll();
-    // Mark wrap so corporate users get gamer styling during snap (per style guide)
     document.querySelector('.ss-wrap')?.classList.add('ss-snap-mode');
+
+    // Check current snap session state FIRST — player may be rejoining mid-game
+    try {
+      const current = await api(`snap/session?game_id=${state.gameId}`);
+      if (current.status === 'playing' || current.status === 'snap_active' || current.status === 'tiebreaker') {
+        renderSnapGame({}); return;
+      }
+      if (current.status === 'countdown') {
+        renderSnapCountdown(current); return;
+      }
+      if (current.status === 'complete') {
+        renderSnapComplete(current); return;
+      }
+    } catch(e) {}
+
+    // Session is 'waiting' — show the waiting room
     const body = el('div', 'ss-screen-body');
     body.innerHTML = `
       <div class="ss-snap-header">
@@ -1252,7 +1267,7 @@
       await api('snap/join', 'POST', { game_id: state.gameId });
     } catch(e) { /* already joined */ }
 
-    // Poll until all joined and countdown starts
+    // Poll until all joined and countdown/game starts
     startSnapPoll(async () => {
       try {
         const data = await api(`snap/session?game_id=${state.gameId}`);
@@ -1260,6 +1275,12 @@
         if (data.status === 'countdown') {
           stopSnapPoll();
           renderSnapCountdown(data);
+        } else if (data.status === 'playing' || data.status === 'snap_active' || data.status === 'tiebreaker') {
+          stopSnapPoll();
+          renderSnapGame({});
+        } else if (data.status === 'complete') {
+          stopSnapPoll();
+          renderSnapComplete(data);
         }
       } catch(e) {}
     }, 1500);
