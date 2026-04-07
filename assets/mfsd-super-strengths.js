@@ -1587,9 +1587,8 @@
       const data = await api('snap/claim', 'POST', { game_id: state.gameId });
       showSnapResult(data);
     } catch(e) {
-      // Restore bullseye only if snap is still active (e.g. claim beat us to it)
+      console.log('Snap claim failed — reason:', e.message);
       snapBullseye.classList.remove('claiming');
-      // Don't re-show — the poll will decide whether to show it again
     } finally {
       snapClaiming = false;
     }

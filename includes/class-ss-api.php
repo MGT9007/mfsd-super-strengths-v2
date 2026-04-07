@@ -814,7 +814,7 @@ class MFSD_SS_API {
         $wpdb->query('START TRANSACTION');
 
         $session = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $ss WHERE game_id = %d AND status IN ('snap_active','tiebreaker') FOR UPDATE",
+            "SELECT * FROM $ss WHERE game_id = %d AND status IN ('snap_active','tiebreaker') ORDER BY id DESC LIMIT 1 FOR UPDATE",
             $game_id
         ), ARRAY_A);
 
