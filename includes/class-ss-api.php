@@ -36,7 +36,7 @@ class MFSD_SS_API {
         return is_user_logged_in();
     }
 
-    private static function get_player($game_id) {
+    private function get_player($game_id) {
         global $wpdb;
         $uid = get_current_user_id();
         $pp  = $wpdb->prefix . MFSD_SS_DB::TBL_PLAYERS;
@@ -49,7 +49,7 @@ class MFSD_SS_API {
     // =========================================================================
     // GET /state  — FIXED to detect completed games first
     // =========================================================================
-    public static function state() {
+    public function state() {
         global $wpdb;
         $uid = get_current_user_id();
         $pp  = $wpdb->prefix . MFSD_SS_DB::TBL_PLAYERS;
@@ -95,7 +95,7 @@ class MFSD_SS_API {
 
         // No active game - check if student with linked parents (can start game)
         if (!$player) {
-            return self::no_game_response($uid);
+            return $this->no_game_response($uid);
         }
 
         $game_id   = (int) $player['game_id'];
@@ -280,7 +280,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /game/start — student initiates game with linked parents
     // =========================================================================
-    public static function start_game() {
+    public function start_game() {
         global $wpdb;
         $uid = get_current_user_id();
         $lp  = $wpdb->prefix . 'mfsd_parent_student_links';
@@ -347,7 +347,7 @@ class MFSD_SS_API {
     // =========================================================================
     // GET /strengths — list of all strength phrases
     // =========================================================================
-    public static function strengths() {
+    public function strengths() {
         $list = MFSD_SS_DB::get_strength_list();
         return rest_ensure_response(['ok' => true, 'strengths' => $list]);
     }
@@ -355,7 +355,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /validate-text
     // =========================================================================
-    public static function validate_text($request) {
+    public function validate_text($request) {
         $params = $request->get_json_params();
         $text   = isset($params['text']) ? trim($params['text']) : '';
 
@@ -370,7 +370,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /submission/save
     // =========================================================================
-    public static function submission_save($request) {
+    public function submission_save($request) {
         global $wpdb;
         $params = $request->get_json_params();
         $game_id         = isset($params['game_id']) ? (int) $params['game_id'] : 0;
@@ -381,7 +381,7 @@ class MFSD_SS_API {
             return new WP_REST_Response(['ok' => false, 'error' => 'Invalid input'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
@@ -406,7 +406,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /submission/submit
     // =========================================================================
-    public static function submission_submit($request) {
+    public function submission_submit($request) {
         global $wpdb;
         $params  = $request->get_json_params();
         $game_id = isset($params['game_id']) ? (int) $params['game_id'] : 0;
@@ -415,7 +415,7 @@ class MFSD_SS_API {
             return new WP_REST_Response(['ok' => false, 'error' => 'game_id required'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
@@ -429,13 +429,13 @@ class MFSD_SS_API {
     // =========================================================================
     // GET /game/hand
     // =========================================================================
-    public static function hand($request) {
+    public function hand($request) {
         $game_id = $request->get_param('game_id');
         if (!$game_id) {
             return new WP_REST_Response(['ok' => false, 'error' => 'game_id required'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
@@ -447,7 +447,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /game/play
     // =========================================================================
-    public static function play_card($request) {
+    public function play_card($request) {
         $params  = $request->get_json_params();
         $game_id = isset($params['game_id']) ? (int) $params['game_id'] : 0;
         $card_id = isset($params['card_id']) ? (int) $params['card_id'] : 0;
@@ -457,7 +457,7 @@ class MFSD_SS_API {
             return new WP_REST_Response(['ok' => false, 'error' => 'game_id and card_id required'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
@@ -473,7 +473,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /game/vote
     // =========================================================================
-    public static function vote($request) {
+    public function vote($request) {
         $params     = $request->get_json_params();
         $game_id    = isset($params['game_id']) ? (int) $params['game_id'] : 0;
         $turn_id    = isset($params['turn_id']) ? (int) $params['turn_id'] : 0;
@@ -483,7 +483,7 @@ class MFSD_SS_API {
             return new WP_REST_Response(['ok' => false, 'error' => 'Missing params'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
@@ -495,14 +495,14 @@ class MFSD_SS_API {
     // =========================================================================
     // GET /game/summary
     // =========================================================================
-    public static function summary($request) {
+    public function summary($request) {
         global $wpdb;
         $game_id = $request->get_param('game_id');
         if (!$game_id) {
             return new WP_REST_Response(['ok' => false, 'error' => 'game_id required'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
@@ -585,7 +585,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /snap/claim
     // =========================================================================
-    public static function snap_claim($request) {
+    public function snap_claim($request) {
         global $wpdb;
         $params     = $request->get_json_params();
         $game_id    = isset($params['game_id']) ? (int) $params['game_id'] : 0;
@@ -595,7 +595,7 @@ class MFSD_SS_API {
             return new WP_REST_Response(['ok' => false, 'error' => 'game_id and session_id required'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
@@ -656,7 +656,7 @@ class MFSD_SS_API {
     // =========================================================================
     // POST /snap/deal
     // =========================================================================
-    public static function snap_deal($request) {
+    public function snap_deal($request) {
         global $wpdb;
         $params  = $request->get_json_params();
         $game_id = isset($params['game_id']) ? (int) $params['game_id'] : 0;
@@ -665,7 +665,7 @@ class MFSD_SS_API {
             return new WP_REST_Response(['ok' => false, 'error' => 'game_id required'], 400);
         }
 
-        $player = self::get_player($game_id);
+        $player = $this->get_player($game_id);
         if (!$player) {
             return new WP_REST_Response(['ok' => false, 'error' => 'Not in game'], 403);
         }
