@@ -68,6 +68,24 @@ class MFSD_SS_API {
         $gp  = $wpdb->prefix . MFSD_SS_DB::TBL_GAMES;
         $cp  = $wpdb->prefix . MFSD_SS_DB::TBL_CARDS;
 
+        // Check for completed games first
+        $completed = $wpdb->get_row($wpdb->prepare(
+            "SELECT g.id AS game_id, g.mode AS game_mode
+             FROM {$pp} p JOIN {$gp} g ON g.id = p.game_id
+             WHERE p.user_id = %d AND g.status = 'complete'
+             ORDER BY g.created_at DESC LIMIT 1",
+            $uid
+        ), ARRAY_A);
+
+        if ($completed) {
+            return rest_ensure_response([
+                'ok'        => true,
+                'status'    => 'complete',
+                'game_id'   => (int)$completed['game_id'],
+                'game_mode' => $completed['game_mode'],
+            ]);
+        }
+
         $player = $wpdb->get_row($wpdb->prepare(
             "SELECT p.*, g.status AS game_status, g.mode AS game_mode,
                     g.id AS game_id, g.current_turn_id, g.round_limit
