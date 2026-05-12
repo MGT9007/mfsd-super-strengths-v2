@@ -38,6 +38,11 @@ if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
     update_option('mfsd_ss_snap_mode',         sanitize_text_field($_POST['snap_mode'] ?? 'quick_draw'));
     update_option('mfsd_ss_snap_quick_draw_target', max(1, (int)($_POST['snap_quick_draw_target'] ?? 5)));
     update_option('mfsd_ss_snap_timer',        max(1, min(10, (int)($_POST['snap_timer'] ?? 3))));
+    // Memory game SteveGPT slots
+    $sg_keys = ['ss_welcome_intro','ss_welcome_chat','ss_student_summary','ss_parent_summary','ss_family_chat','ss_demo_picker','ss_demo_summary'];
+    foreach ($sg_keys as $k) {
+        update_option('mfsd_stevegpt_map_' . $k, sanitize_text_field($_POST['sg_' . $k] ?? ''));
+    }
     $notice = ['success', 'Configuration saved.'];
 }
 
@@ -488,6 +493,32 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                         <input type="number" name="ft_max_len" value="<?php echo (int) get_option('mfsd_ss_free_text_max_len',40); ?>" max="100" class="small-text"> characters
                     </td>
                 </tr>
+
+                <tr><td colspan="2"><hr><h3 style="margin:0">Memory Game — SteveGPT Slots</h3>
+                    <p class="description">Paste SteveGPT prompt option IDs (from the SteveGPT plugin) for each Memory game role. Leave blank to disable AI for that role.</p></td></tr>
+                <?php
+                $sg_labels = [
+                    'ss_welcome_intro'   => ['Welcome intro',      'AI narration on the welcome/lobby screen.'],
+                    'ss_welcome_chat'    => ['Welcome chatbot',     'Chatbot available on the welcome screen.'],
+                    'ss_student_summary' => ['Student summary',     'Post-game AI summary for the student.'],
+                    'ss_parent_summary'  => ['Parent summary',      'Post-game AI summary for the parent.'],
+                    'ss_family_chat'     => ['Family chatbot',      'Shared chatbot on the results/summary screen.'],
+                    'ss_demo_picker'     => ['Demo card picker',    'Steve AI picks cards for demo mode.'],
+                    'ss_demo_summary'    => ['Demo summary',        'AI summary generated after a demo game.'],
+                ];
+                foreach ($sg_labels as $k => [$label, $desc]):
+                    $opt = 'mfsd_stevegpt_map_' . $k;
+                ?>
+                <tr>
+                    <th scope="row"><?php echo esc_html($label); ?></th>
+                    <td>
+                        <input type="text" name="sg_<?php echo esc_attr($k); ?>"
+                               value="<?php echo esc_attr(get_option($opt, '')); ?>"
+                               class="regular-text" placeholder="e.g. stevegpt_prompt_123">
+                        <p class="description"><?php echo esc_html($desc); ?></p>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
             </tbody></table>
 
             <p class="submit">

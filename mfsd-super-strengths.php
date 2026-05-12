@@ -1,14 +1,14 @@
 <?php
 /**
  * Plugin Name: MFSD Super Strengths Cards
- * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Snap mode.
- * Version: 4.6.0
+ * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
+ * Version: 5.0.0
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '4.6.0');
+define('MFSD_SS_VERSION', '5.0.0');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -26,15 +26,21 @@ final class MFSD_Super_Strengths {
 
     private function __construct() {
         register_activation_hook(__FILE__, ['MFSD_SS_DB', 'install']);
+        register_activation_hook(__FILE__, [$this, 'activate']);
         add_action('init',          [$this, 'register_assets']);
         add_shortcode('mfsd_super_strengths', [$this, 'shortcode']);
         add_action('rest_api_init', ['MFSD_SS_API', 'register_routes']);
         add_action('admin_menu',    [$this, 'admin_menu']);
 
-        add_action('mfsd_ss_timeout_check', ['MFSD_SS_Game', 'run_timeout_check']);
-        if (!wp_next_scheduled('mfsd_ss_timeout_check')) {
-            wp_schedule_event(time(), 'hourly', 'mfsd_ss_timeout_check');
+        add_action('mfsd_ss_turn_timeout_check', ['MFSD_SS_Game', 'run_timeout_check']);
+        if (!wp_next_scheduled('mfsd_ss_turn_timeout_check')) {
+            wp_schedule_event(time(), 'hourly', 'mfsd_ss_turn_timeout_check');
         }
+    }
+
+    public function activate() {
+        // Deregister snap cron replaced by memory-game cron
+        wp_clear_scheduled_hook('mfsd_ss_timeout_check');
     }
 
     public function register_assets() {

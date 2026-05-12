@@ -18,10 +18,19 @@ class MFSD_SS_DB {
     const TBL_STRENGTHS     = 'mfsd_ss_strengths';
     const TBL_BANNED        = 'mfsd_ss_banned_terms';
     const TBL_FLAGS         = 'mfsd_ss_flagged';
-    // Snap tables
+    // Snap tables — dormant in v5, not dropped
     const TBL_SNAP_SESSIONS = 'mfsd_ss_snap_sessions';
     const TBL_SNAP_HANDS    = 'mfsd_ss_snap_hands';
     const TBL_SNAP_CLAIMS   = 'mfsd_ss_snap_claims';
+    // Memory game tables (v5)
+    const TBL_SM_GAMES          = 'mfsd_sm_games';
+    const TBL_SM_PLAYERS        = 'mfsd_sm_players';
+    const TBL_SM_SELF_STRENGTHS = 'mfsd_sm_self_strengths';
+    const TBL_SM_CARDS          = 'mfsd_sm_cards';
+    const TBL_SM_BOARD          = 'mfsd_sm_board';
+    const TBL_SM_TURNS          = 'mfsd_sm_turns';
+    const TBL_SM_SUMMARIES      = 'mfsd_sm_summaries';
+    const TBL_SM_DEMO_RATIONALE = 'mfsd_sm_demo_rationale';
 
     public static function install() {
         global $wpdb;
@@ -36,9 +45,18 @@ class MFSD_SS_DB {
         $s   = $wpdb->prefix . self::TBL_STRENGTHS;
         $b   = $wpdb->prefix . self::TBL_BANNED;
         $fl  = $wpdb->prefix . self::TBL_FLAGS;
-        $ss  = $wpdb->prefix . self::TBL_SNAP_SESSIONS;
-        $sh  = $wpdb->prefix . self::TBL_SNAP_HANDS;
-        $sc  = $wpdb->prefix . self::TBL_SNAP_CLAIMS;
+        $ss   = $wpdb->prefix . self::TBL_SNAP_SESSIONS;
+        $sh   = $wpdb->prefix . self::TBL_SNAP_HANDS;
+        $sc   = $wpdb->prefix . self::TBL_SNAP_CLAIMS;
+        // Memory game tables
+        $smg  = $wpdb->prefix . self::TBL_SM_GAMES;
+        $smp  = $wpdb->prefix . self::TBL_SM_PLAYERS;
+        $smss = $wpdb->prefix . self::TBL_SM_SELF_STRENGTHS;
+        $smc  = $wpdb->prefix . self::TBL_SM_CARDS;
+        $smb  = $wpdb->prefix . self::TBL_SM_BOARD;
+        $smt  = $wpdb->prefix . self::TBL_SM_TURNS;
+        $smsu = $wpdb->prefix . self::TBL_SM_SUMMARIES;
+        $smdr = $wpdb->prefix . self::TBL_SM_DEMO_RATIONALE;
 
         // NOTE: If upgrading from v1, run:
         // ALTER TABLE wp_mfsd_ss_games MODIFY mode ENUM('short','full','snap') NOT NULL DEFAULT 'full';
@@ -221,6 +239,141 @@ class MFSD_SS_DB {
             KEY idx_session (session_id)
         ) $c;");
 
+        // ── Memory game tables (v5) ───────────────────────────────────────────
+
+        dbDelta("CREATE TABLE $smg (
+            id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_key         VARCHAR(64)     NOT NULL,
+            game_type        VARCHAR(20)     NOT NULL DEFAULT 'family',
+            student_user_id  BIGINT UNSIGNED NOT NULL,
+            status           VARCHAR(30)     NOT NULL DEFAULT 'submission_self',
+            memory_mode      VARCHAR(20)     NOT NULL DEFAULT 'first_to_x',
+            card_pool        VARCHAR(20)     NOT NULL DEFAULT 'family_cards',
+            target_matches   TINYINT         NOT NULL DEFAULT 5,
+            time_limit_mins  TINYINT         NOT NULL DEFAULT 5,
+            turn_timeout_mins TINYINT        NOT NULL DEFAULT 5,
+            game_started_at  DATETIME        NULL,
+            game_ends_at     DATETIME        NULL,
+            completed_at     DATETIME        NULL,
+            winner_player_id BIGINT UNSIGNED NULL,
+            created_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_game_key (game_key),
+            KEY idx_student (student_user_id),
+            KEY idx_status  (status)
+        ) ENGINE=InnoDB $c;");
+
+        dbDelta("CREATE TABLE $smp (
+            id                       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id                  BIGINT UNSIGNED NOT NULL,
+            user_id                  BIGINT UNSIGNED NOT NULL,
+            display_name             VARCHAR(100)    NOT NULL,
+            role                     VARCHAR(20)     NOT NULL,
+            turn_order               TINYINT         NOT NULL DEFAULT 0,
+            self_submitted           TINYINT(1)      NOT NULL DEFAULT 0,
+            others_submitted         TINYINT(1)      NOT NULL DEFAULT 0,
+            score                    SMALLINT        NOT NULL DEFAULT 0,
+            last_seen_at             DATETIME        NULL,
+            current_turn_started_at  DATETIME        NULL,
+            joined_at                DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_game_user (game_id, user_id),
+            KEY idx_game (game_id),
+            KEY idx_turn (game_id, turn_order)
+        ) ENGINE=InnoDB $c;");
+
+        dbDelta("CREATE TABLE $smss (
+            id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id        BIGINT UNSIGNED NOT NULL,
+            player_id      BIGINT UNSIGNED NOT NULL,
+            strength_id    BIGINT UNSIGNED NULL,
+            strength_text  VARCHAR(200)    NOT NULL,
+            created_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_game_player (game_id, player_id)
+        ) ENGINE=InnoDB $c;");
+
+        dbDelta("CREATE TABLE $smc (
+            id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id           BIGINT UNSIGNED NOT NULL,
+            author_player_id  BIGINT UNSIGNED NOT NULL,
+            target_player_id  BIGINT UNSIGNED NOT NULL,
+            strength_id       BIGINT UNSIGNED NULL,
+            strength_text     VARCHAR(200)    NOT NULL,
+            is_free_text      TINYINT(1)      NOT NULL DEFAULT 0,
+            flagged           TINYINT(1)      NOT NULL DEFAULT 0,
+            approved          TINYINT(1)      NOT NULL DEFAULT 1,
+            created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_game   (game_id),
+            KEY idx_author (game_id, author_player_id),
+            KEY idx_target (game_id, target_player_id)
+        ) ENGINE=InnoDB $c;");
+
+        dbDelta("CREATE TABLE $smb (
+            id                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id              BIGINT UNSIGNED NOT NULL,
+            position             SMALLINT        NOT NULL,
+            pair_key             VARCHAR(40)     NOT NULL,
+            card_type            VARCHAR(20)     NOT NULL,
+            card_id              BIGINT UNSIGNED NULL,
+            self_strength_id     BIGINT UNSIGNED NULL,
+            author_player_id     BIGINT UNSIGNED NULL,
+            target_player_id     BIGINT UNSIGNED NULL,
+            strength_text        VARCHAR(200)    NOT NULL,
+            author_display       VARCHAR(100)    NULL,
+            target_display       VARCHAR(100)    NULL,
+            is_face_up           TINYINT(1)      NOT NULL DEFAULT 0,
+            is_matched           TINYINT(1)      NOT NULL DEFAULT 0,
+            matched_by_player_id BIGINT UNSIGNED NULL,
+            matched_at           DATETIME        NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_game_pos (game_id, position),
+            KEY idx_game    (game_id),
+            KEY idx_pair    (game_id, pair_key),
+            KEY idx_matched (game_id, is_matched)
+        ) ENGINE=InnoDB $c;");
+
+        dbDelta("CREATE TABLE $smt (
+            id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id        BIGINT UNSIGNED NOT NULL,
+            player_id      BIGINT UNSIGNED NOT NULL,
+            turn_number    SMALLINT        NOT NULL,
+            flip1_position SMALLINT        NULL,
+            flip2_position SMALLINT        NULL,
+            is_match       TINYINT(1)      NULL,
+            timed_out      TINYINT(1)      NOT NULL DEFAULT 0,
+            started_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at   DATETIME        NULL,
+            PRIMARY KEY (id),
+            KEY idx_game   (game_id),
+            KEY idx_player (game_id, player_id)
+        ) ENGINE=InnoDB $c;");
+
+        dbDelta("CREATE TABLE $smsu (
+            id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id        BIGINT UNSIGNED NOT NULL,
+            player_id      BIGINT UNSIGNED NOT NULL,
+            summary_type   VARCHAR(20)     NOT NULL,
+            ai_summary     LONGTEXT        NULL,
+            generated_at   DATETIME        NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_game_player (game_id, player_id),
+            KEY idx_game (game_id)
+        ) ENGINE=InnoDB $c;");
+
+        dbDelta("CREATE TABLE $smdr (
+            id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            game_id         BIGINT UNSIGNED NOT NULL,
+            board_card_id   BIGINT UNSIGNED NOT NULL,
+            strength_text   VARCHAR(200)    NOT NULL,
+            source_activity VARCHAR(60)     NOT NULL,
+            rationale       TEXT            NOT NULL,
+            created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_game (game_id)
+        ) ENGINE=InnoDB $c;");
+
         // Seed
         $count_s = (int) $wpdb->get_var("SELECT COUNT(*) FROM $s");
         if ($count_s === 0) self::seed_strengths();
@@ -242,6 +395,14 @@ class MFSD_SS_DB {
         add_option('mfsd_ss_snap_mode',          'quick_draw');
         add_option('mfsd_ss_snap_quick_draw_target', 5);
         add_option('mfsd_ss_snap_timer',         3);
+        // Default options — memory game SteveGPT slots
+        add_option('mfsd_stevegpt_map_ss_welcome_intro',   '');
+        add_option('mfsd_stevegpt_map_ss_welcome_chat',    '');
+        add_option('mfsd_stevegpt_map_ss_student_summary', '');
+        add_option('mfsd_stevegpt_map_ss_parent_summary',  '');
+        add_option('mfsd_stevegpt_map_ss_family_chat',     '');
+        add_option('mfsd_stevegpt_map_ss_demo_picker',     '');
+        add_option('mfsd_stevegpt_map_ss_demo_summary',    '');
     }
 
     // ── Seed: 100 Super Strengths ─────────────────────────────────────────────
