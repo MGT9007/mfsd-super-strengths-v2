@@ -15,6 +15,7 @@ define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 require_once MFSD_SS_PATH . 'includes/class-ss-db.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-validator.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-game.php';
+require_once MFSD_SS_PATH . 'includes/class-ss-memory.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-api.php';
 
 final class MFSD_Super_Strengths {
