@@ -1319,3 +1319,225 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   .ss-snap-bullseye-word  { font-size: 11px; }
   .ss-snap-hand-count     { font-size: 22px; }
 }
+
+/* =============================================================================
+   MEMORY GAME BOARD (v5 — MYF-167)
+   ============================================================================= */
+
+/* ── Board grid ─────────────────────────────────────────────────────────────── */
+.ss-board-grid {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+.ss-board-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.ss-board-grid-6 { grid-template-columns: repeat(6, 1fr); }
+
+@media (max-width: 480px) {
+  .ss-board-grid-6 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ── Card tiles ─────────────────────────────────────────────────────────────── */
+.ss-card-tile {
+  aspect-ratio: 2/3;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: default;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+}
+.ss-card-tile.flippable {
+  cursor: pointer;
+}
+.ss-card-tile.flippable:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+}
+.ss-card-tile-back {
+  width: 100%;
+  height: 100%;
+  background: var(--ss-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.1);
+}
+.ss-ct-back-icon {
+  font-size: 22px;
+  opacity: 0.6;
+}
+.ss-card-tile-front {
+  width: 100%;
+  height: 100%;
+  background: var(--ss-surface);
+  border: 2px solid var(--ss-purple-lt);
+  border-radius: 10px;
+  padding: 8px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ss-ct-label {
+  font-size: 10px;
+  color: var(--ss-text);
+  text-align: center;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ── Matched state ───────────────────────────────────────────────────────────── */
+.ss-card-tile.matched .ss-card-tile-front {
+  border-color: var(--ss-gold);
+  background: rgba(201,162,39,0.12);
+}
+.ss-wrap.ss-theme-student .ss-card-tile.matched .ss-card-tile-front {
+  box-shadow: 0 0 12px rgba(201,162,39,0.4);
+}
+.ss-card-tile.flip-anim {
+  animation: ss-match-pop 0.35s ease forwards;
+}
+@keyframes ss-match-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* ── Scoreboard ─────────────────────────────────────────────────────────────── */
+.ss-scoreboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  justify-content: center;
+}
+.ss-scoreboard-final {
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 320px;
+  margin: 16px auto 0;
+}
+.ss-score-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--ss-surface);
+  border: 1.5px solid rgba(255,255,255,0.07);
+  font-size: 13px;
+  color: var(--ss-text);
+  transition: border-color 0.2s;
+}
+.ss-score-pill.active {
+  border-color: var(--ss-gold);
+  background: rgba(201,162,39,0.1);
+}
+.ss-score-name { flex: 1; font-weight: 600; }
+.ss-score-val  { font-weight: 700; color: var(--ss-gold-lt); min-width: 20px; text-align: right; }
+
+/* ── Presence dot ───────────────────────────────────────────────────────────── */
+.ss-presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ss-presence-dot.online  { background: #4ade80; }
+.ss-presence-dot.offline { background: #6b7280; }
+
+/* ── Turn indicator ─────────────────────────────────────────────────────────── */
+.ss-turn-indicator {
+  text-align: center;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--ss-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ss-turn-indicator.my-turn {
+  color: var(--ss-gold-lt);
+  font-weight: 700;
+  font-size: 15px;
+}
+.ss-turn-pulse {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ss-gold);
+  animation: ss-pulse 1.2s ease infinite;
+}
+@keyframes ss-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.4); }
+}
+
+/* ── Away banner ────────────────────────────────────────────────────────────── */
+.ss-away-banner {
+  margin: 0 16px 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255,200,60,0.1);
+  border: 1px solid rgba(255,200,60,0.3);
+  font-size: 13px;
+  color: var(--ss-gold-lt);
+  text-align: center;
+}
+
+/* ── Board progress ─────────────────────────────────────────────────────────── */
+.ss-board-progress {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ss-muted);
+  padding: 4px 16px;
+}
+
+/* ── Game timer ─────────────────────────────────────────────────────────────── */
+.ss-game-timer {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ss-gold-lt);
+  padding: 4px 16px 8px;
+  letter-spacing: 0.05em;
+}
+
+/* ── Match flash overlay ────────────────────────────────────────────────────── */
+.ss-match-flash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  z-index: 9999;
+  animation: ss-flash-in 0.25s ease;
+}
+@keyframes ss-flash-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.ss-match-flash.fade-out {
+  animation: ss-flash-out 0.4s ease forwards;
+}
+@keyframes ss-flash-out {
+  to { opacity: 0; }
+}
+.ss-match-flash-inner {
+  background: var(--ss-surface);
+  border: 2px solid var(--ss-gold);
+  border-radius: 16px;
+  padding: 32px 40px;
+  text-align: center;
+  animation: ss-match-scale 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes ss-match-scale {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.ss-match-icon { font-size: 48px; margin-bottom: 8px; }
+.ss-match-text { font-size: 24px; font-weight: 800; color: var(--ss-gold-lt); margin-bottom: 8px; }
+.ss-match-label { font-size: 13px; color: var(--ss-muted); max-width: 240px; line-height: 1.5; }

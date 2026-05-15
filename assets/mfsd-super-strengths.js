@@ -13,12 +13,18 @@
   // ---- State ----------------------------------------------------------------
   let state = {
     // Memory game (v5)
-    gameId:        null,
-    gameKey:       null,   // set for memory games; null for legacy guessing game
-    gameType:      null,   // 'family' | 'demo'
-    gameStatus:    null,   // submission_self | submission_others | dealing | playing | complete
-    memoryMode:    null,   // 'all_match' | 'first_to_x' | 'timed'
-    draftSelf:     [],     // Phase 1 self-strength picks
+    gameId:               null,
+    gameKey:              null,   // set for memory games; null for legacy guessing game
+    gameType:             null,   // 'family' | 'demo'
+    gameStatus:           null,   // submission_self | submission_others | dealing | playing | complete
+    memoryMode:           null,   // 'all_match' | 'first_to_x' | 'timed'
+    draftSelf:            [],     // Phase 1 self-strength picks
+    board:                [],     // array of position objects from /memory/board
+    currentTurnPlayerId:  null,   // player.id of whoever has the current turn
+    gameEndsAt:           null,   // ISO datetime string (timed mode only)
+    heartbeatTimer:       null,   // setInterval reference
+    pendingFlipPos:       null,   // position of flip 1 while awaiting flip 2
+    winnerPlayerId:       null,   // set when game_complete
     // Legacy guessing game
     gameMode:      cfg.gameMode || 'full',
     hand:          [],
@@ -112,13 +118,16 @@
 
       if (data.status !== 'no_game') {
         // Active or completed memory game
-        state.gameId     = data.game_id;
-        state.gameKey    = data.game_key;
-        state.gameType   = data.game_type;
-        state.gameStatus = data.status;
-        state.memoryMode = data.memory_mode;
-        state.player     = data.player;
-        state.allPlayers = data.all_players || [];
+        state.gameId              = data.game_id;
+        state.gameKey             = data.game_key;
+        state.gameType            = data.game_type;
+        state.gameStatus          = data.status;
+        state.memoryMode          = data.memory_mode;
+        state.player              = data.player;
+        state.allPlayers          = data.all_players || [];
+        state.currentTurnPlayerId = data.current_turn_player_id || null;
+        state.gameEndsAt          = data.game_ends_at           || null;
+        state.winnerPlayerId      = data.winner_player_id       || null;
 
         if (data.status === 'submission_self' || data.status === 'submission_others') {
           await loadStrengths();
@@ -175,10 +184,14 @@
       // ── Legacy guessing game statuses ───────────────────────────────────
       case 'submission': renderSubmissionIntro(); break;
       case 'playing':
-        if (state.gameMode === 'snap') renderSnapWaiting();
+        if (state.gameKey) renderBoard();
+        else if (state.gameMode === 'snap') renderSnapWaiting();
         else renderGameTable();
         break;
-      case 'complete':   renderFinalResults(); break;
+      case 'complete':
+        if (state.gameKey) renderGameOver(state.winnerPlayerId);
+        else renderFinalResults();
+        break;
       default:           renderNoGame({status:'no_game', message:'Unknown game state.'});
     }
   }
@@ -1511,7 +1524,9 @@
           state.gameStatus = 'playing';
           state.allPlayers = data.all_players || state.allPlayers;
           if (state.gameKey) {
-            state.player = data.player || state.player;
+            state.player              = data.player || state.player;
+            state.currentTurnPlayerId = data.current_turn_player_id || null;
+            state.gameEndsAt          = data.game_ends_at           || null;
           } else {
             state.gameMode = data.game_mode || state.gameMode;
             state.player   = data.player    || state.player;
@@ -2404,6 +2419,366 @@
             <a href="${escHtml(courseUrl)}" class="ss-btn ss-btn-ghost ss-btn-full">📚 Course Details</a>
           </div>`;
       });
+  }
+
+  // =========================================================================
+  // MEMORY GAME — HEARTBEAT (MYF-167)
+  // =========================================================================
+  function startHeartbeat() {
+    stopHeartbeat();
+    state.heartbeatTimer = setInterval(async () => {
+      try { await api('memory/heartbeat', 'POST', { game_id: state.gameId }); } catch(_) {}
+    }, 30000);
+  }
+
+  function stopHeartbeat() {
+    if (state.heartbeatTimer) { clearInterval(state.heartbeatTimer); state.heartbeatTimer = null; }
+  }
+
+  function getCurrentStateForUI() {
+    return {
+      status:                 state.gameStatus,
+      current_turn_player_id: state.currentTurnPlayerId,
+      game_ends_at:           state.gameEndsAt,
+      all_players:            state.allPlayers,
+      winner_player_id:       state.winnerPlayerId,
+    };
+  }
+
+  // =========================================================================
+  // MEMORY GAME — BOARD (MYF-167)
+  // =========================================================================
+  async function renderBoard() {
+    stopPoll();
+    startHeartbeat();
+
+    const lv = loading('Loading board…');
+    try {
+      const [stateData, boardData] = await Promise.all([
+        api('memory/state'),
+        api('memory/board?game_id=' + state.gameId),
+      ]);
+      unload(lv);
+
+      state.allPlayers          = stateData.all_players          || state.allPlayers;
+      state.player              = stateData.player               || state.player;
+      state.currentTurnPlayerId = stateData.current_turn_player_id || null;
+      state.gameEndsAt          = stateData.game_ends_at         || null;
+      state.board               = boardData.positions            || [];
+
+      if (stateData.status === 'complete') {
+        stopHeartbeat();
+        state.gameStatus     = 'complete';
+        state.winnerPlayerId = stateData.winner_player_id || null;
+        renderGameOver(state.winnerPlayerId);
+        return;
+      }
+
+      renderBoardUI(stateData, state.board);
+
+      const myPlayerId = state.player ? state.player.id : null;
+      if (state.currentTurnPlayerId !== myPlayerId) {
+        startPoll(async () => {
+          try {
+            const [sd, bd] = await Promise.all([
+              api('memory/state'),
+              api('memory/board?game_id=' + state.gameId),
+            ]);
+            state.allPlayers          = sd.all_players              || state.allPlayers;
+            state.player              = sd.player                   || state.player;
+            state.currentTurnPlayerId = sd.current_turn_player_id   || null;
+            state.gameEndsAt          = sd.game_ends_at             || null;
+            state.board               = bd.positions                || [];
+
+            if (sd.status === 'complete') {
+              stopPoll(); stopHeartbeat();
+              state.gameStatus     = 'complete';
+              state.winnerPlayerId = sd.winner_player_id || null;
+              renderGameOver(state.winnerPlayerId);
+              return;
+            }
+            renderBoardUI(sd, state.board);
+            if (sd.current_turn_player_id === (state.player && state.player.id)) {
+              stopPoll();
+            }
+          } catch(_) {}
+        }, 4000);
+      }
+    } catch(e) {
+      unload(lv);
+      renderError(e.message);
+    }
+  }
+
+  function renderBoardUI(stateData, positions) {
+    const myPlayerId  = state.player ? state.player.id : null;
+    const isMyTurn    = stateData.current_turn_player_id === myPlayerId;
+    const allPlayers  = stateData.all_players || state.allPlayers || [];
+
+    const body = el('div', 'ss-screen-body');
+
+    const header = el('div', 'ss-game-header');
+    header.innerHTML = `<div class="ss-game-title">🧠 Super Strengths Memory</div>`;
+    body.appendChild(header);
+
+    // Scoreboard
+    const scoreboard = el('div', 'ss-scoreboard');
+    allPlayers.forEach(p => {
+      const isActive  = p.id === stateData.current_turn_player_id;
+      const presence  = p.is_present ? 'online' : 'offline';
+      const pill      = el('div', 'ss-score-pill' + (isActive ? ' active' : ''));
+      pill.innerHTML  = `<span class="ss-presence-dot ${presence}"></span><span class="ss-score-name">${escHtml(p.display_name)}</span><span class="ss-score-val">${p.score}</span>`;
+      scoreboard.appendChild(pill);
+    });
+    body.appendChild(scoreboard);
+
+    // Turn indicator
+    const turnBar = el('div', 'ss-turn-indicator' + (isMyTurn ? ' my-turn' : ''));
+    if (isMyTurn) {
+      turnBar.innerHTML = `<span class="ss-turn-pulse"></span> Your turn — flip a card!`;
+    } else {
+      const turnPlayer = allPlayers.find(p => p.id === stateData.current_turn_player_id);
+      turnBar.textContent = (turnPlayer ? escHtml(turnPlayer.display_name) : 'Someone') + '\'s turn…';
+    }
+    body.appendChild(turnBar);
+
+    // Away banner
+    const awayPlayer = allPlayers.find(p => p.id === stateData.current_turn_player_id && p.is_present === false);
+    if (awayPlayer) body.appendChild(renderAwayNoticeBanner(awayPlayer));
+
+    // Board progress
+    const totalPairs   = Math.floor(positions.length / 2);
+    const matchedPairs = positions.filter(p => p.is_matched).length / 2;
+    const progress     = el('div', 'ss-board-progress');
+    progress.textContent = `${Math.round(matchedPairs)} / ${totalPairs} pairs matched`;
+    body.appendChild(progress);
+
+    // Game timer (timed mode)
+    if (stateData.game_ends_at) {
+      const timerEl   = el('div', 'ss-game-timer');
+      const endsAt    = new Date(stateData.game_ends_at.replace(' ', 'T') + 'Z');
+      const updateTimer = () => {
+        const secs = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+        const m    = Math.floor(secs / 60).toString().padStart(2, '0');
+        const s    = (secs % 60).toString().padStart(2, '0');
+        timerEl.textContent = `⏱ ${m}:${s}`;
+      };
+      updateTimer();
+      const clockInterval = setInterval(updateTimer, 1000);
+      timerEl._clockInterval = clockInterval;
+      body.appendChild(timerEl);
+    }
+
+    // Board grid
+    const colCount  = positions.length > 24 ? 6 : 4;
+    const boardGrid = el('div', `ss-board-grid ss-board-grid-${colCount}`);
+
+    positions.forEach((pos, i) => {
+      const tile = el('div', 'ss-card-tile');
+      if (pos.is_matched) {
+        tile.classList.add('matched');
+        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+      } else if (pos.is_face_up) {
+        tile.classList.add('face-up');
+        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+      } else {
+        tile.innerHTML = `<div class="ss-card-tile-back"><span class="ss-ct-back-icon">⭐</span></div>`;
+        if (isMyTurn) {
+          tile.classList.add('flippable');
+          tile.addEventListener('click', () => handleFlip(pos.position, tile, boardGrid));
+        }
+      }
+      boardGrid.appendChild(tile);
+    });
+
+    body.appendChild(boardGrid);
+    render(body);
+  }
+
+  async function handleFlip(position, tileEl, boardGrid) {
+    if (tileEl.classList.contains('flipping')) return;
+    tileEl.classList.add('flipping');
+
+    // Disable all tile clicks during the API round-trip
+    boardGrid.querySelectorAll('.flippable').forEach(t => {
+      t.classList.remove('flippable');
+      t.onclick = null;
+    });
+
+    try {
+      const res = await api('memory/flip', 'POST', { game_id: state.gameId, position });
+
+      if (res.flip_number === 1) {
+        // Optimistic update: mark this position face-up in local board state
+        const boardPos = state.board.find(p => p.position === position);
+        if (boardPos) { boardPos.is_face_up = true; boardPos.content = res.content; }
+        state.pendingFlipPos = position;
+        renderBoardUI(getCurrentStateForUI(), state.board);
+        return;
+      }
+
+      // Flip 2 response — update local board state
+      const boardPos = state.board.find(p => p.position === position);
+      if (boardPos) {
+        boardPos.is_face_up = true;
+        boardPos.content    = res.is_match ? res.matched_pair[1] : res.flip2_content;
+      }
+
+      if (res.is_match) {
+        // Mark both as matched locally
+        state.board.forEach(p => {
+          if (p.is_face_up && !p.is_matched) {
+            p.is_matched   = true;
+            p.is_face_up   = false;
+            p.matched_by   = myPlayerId();
+          }
+        });
+        state.pendingFlipPos = null;
+        if (state.player) {
+          state.player.score = res.new_score;
+          const ap = state.allPlayers.find(p => p.id === state.player.id);
+          if (ap) ap.score = res.new_score;
+        }
+
+        renderBoardUI(getCurrentStateForUI(), state.board);
+        await showMatchMoment(res.matched_pair, res.is_self_strength_match);
+
+        if (res.game_complete) {
+          stopHeartbeat(); stopPoll();
+          state.gameStatus     = 'complete';
+          state.winnerPlayerId = res.winner_player_id;
+          renderGameOver(res.winner_player_id);
+          return;
+        }
+
+        // Same player goes again — re-render with updated board
+        renderBoardUI(getCurrentStateForUI(), state.board);
+
+      } else {
+        // No match — show both face-up for 1.5 s then rotate
+        renderBoardUI(getCurrentStateForUI(), state.board);
+        await new Promise(r => setTimeout(r, 1500));
+
+        state.board.forEach(p => { if (p.is_face_up && !p.is_matched) p.is_face_up = false; });
+        state.pendingFlipPos      = null;
+        state.currentTurnPlayerId = res.next_player_id || null;
+
+        if (res.next_player_id !== myPlayerId()) {
+          renderBoardUI(getCurrentStateForUI(), state.board);
+          // Start polling since it's not our turn
+          startPoll(async () => {
+            try {
+              const [sd, bd] = await Promise.all([
+                api('memory/state'),
+                api('memory/board?game_id=' + state.gameId),
+              ]);
+              state.allPlayers          = sd.all_players              || state.allPlayers;
+              state.player              = sd.player                   || state.player;
+              state.currentTurnPlayerId = sd.current_turn_player_id   || null;
+              state.gameEndsAt          = sd.game_ends_at             || null;
+              state.board               = bd.positions                || [];
+
+              if (sd.status === 'complete') {
+                stopPoll(); stopHeartbeat();
+                state.gameStatus     = 'complete';
+                state.winnerPlayerId = sd.winner_player_id || null;
+                renderGameOver(state.winnerPlayerId);
+                return;
+              }
+              renderBoardUI(sd, state.board);
+              if (sd.current_turn_player_id === myPlayerId()) stopPoll();
+            } catch(_) {}
+          }, 4000);
+        } else {
+          renderBoardUI(getCurrentStateForUI(), state.board);
+        }
+      }
+    } catch(e) {
+      renderError(e.message);
+    }
+  }
+
+  function myPlayerId() {
+    return state.player ? state.player.id : null;
+  }
+
+  function showMatchMoment(matchedPair, isSelfStrengthMatch) {
+    return new Promise(resolve => {
+      const icon    = isSelfStrengthMatch ? '✨' : '🎉';
+      const label   = matchedPair && matchedPair[0] ? escHtml(matchedPair[0].label) : '';
+      const overlay = el('div', 'ss-match-flash');
+      overlay.innerHTML = `
+        <div class="ss-match-flash-inner">
+          <div class="ss-match-icon">${icon}</div>
+          <div class="ss-match-text">Match!</div>
+          <div class="ss-match-label">${label}</div>
+        </div>`;
+      document.getElementById('mfsd-ss-root').appendChild(overlay);
+      setTimeout(() => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => { overlay.remove(); resolve(); }, 400);
+      }, 2100);
+    });
+  }
+
+  function renderAwayNoticeBanner(awayPlayer) {
+    const banner = el('div', 'ss-away-banner');
+    banner.textContent = `${escHtml(awayPlayer.display_name)} hasn't been seen recently — waiting for them to return.`;
+    return banner;
+  }
+
+  // =========================================================================
+  // MEMORY GAME — GAME OVER (MYF-167)
+  // =========================================================================
+  function renderGameOver(winnerPlayerId) {
+    stopPoll(); stopHeartbeat();
+
+    api('memory/state').then(data => {
+      const allPlayers = data.all_players || state.allPlayers || [];
+      const winnerId   = winnerPlayerId || data.winner_player_id || null;
+      const winnerRow  = allPlayers.find(p => p.id === winnerId);
+      const winnerName = winnerRow ? winnerRow.display_name : 'the family';
+      const isWinner   = winnerId === myPlayerId();
+
+      const body   = el('div', 'ss-screen-body');
+      const header = el('div', 'ss-game-header');
+      header.innerHTML = `<div class="ss-game-title">🏆 Game Over!</div>`;
+      body.appendChild(header);
+
+      const inner = el('div', '');
+      inner.style.cssText = 'padding:32px 20px;text-align:center;';
+
+      const trophy   = isWinner ? '🏆' : '🌟';
+      const headline = isWinner ? `You won, ${escHtml(winnerName)}!` : `${escHtml(winnerName)} wins!`;
+
+      inner.innerHTML = `
+        <div style="font-size:56px;margin-bottom:16px;">${trophy}</div>
+        <div style="font-size:22px;font-weight:700;margin-bottom:24px;">${headline}</div>`;
+
+      const scoreTable = el('div', 'ss-scoreboard ss-scoreboard-final');
+      const sorted     = [...allPlayers].sort((a, b) => b.score - a.score);
+      sorted.forEach((p, i) => {
+        const pill = el('div', 'ss-score-pill' + (p.id === winnerId ? ' active' : ''));
+        pill.innerHTML = `<span>${i + 1}.</span><span class="ss-score-name">${escHtml(p.display_name)}</span><span class="ss-score-val">${p.score} pair${p.score !== 1 ? 's' : ''}</span>`;
+        scoreTable.appendChild(pill);
+      });
+      inner.appendChild(scoreTable);
+      body.appendChild(inner);
+      body.appendChild(renderPostGamePlaceholder());
+      render(body);
+    }).catch(() => {
+      const body = el('div', 'ss-screen-body');
+      body.innerHTML = `<div style="padding:40px;text-align:center;"><div style="font-size:48px;">🏆</div><div style="margin-top:16px;">Game complete!</div></div>`;
+      body.appendChild(renderPostGamePlaceholder());
+      render(body);
+    });
+  }
+
+  function renderPostGamePlaceholder() {
+    const wrap = el('div', '');
+    wrap.style.cssText = 'padding:16px 20px 32px;text-align:center;color:var(--ss-muted);font-size:14px;';
+    wrap.textContent = 'Your strength summary and badges are coming soon!';
+    return wrap;
   }
 
   // =========================================================================

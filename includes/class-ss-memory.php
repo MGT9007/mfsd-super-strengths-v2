@@ -423,4 +423,315 @@ class MFSD_SS_Memory {
 
         $wpdb->update($smg, $update_data, ['id' => $game_id]);
     }
+
+    // =========================================================================
+    // PHASE C — BOARD PLAY ENGINE (MYF-165, MYF-166)
+    // =========================================================================
+
+    private static function card_content(array $card): array {
+        return [
+            'card_type'      => $card['card_type'],
+            'strength_text'  => $card['strength_text'],
+            'author_display' => $card['author_display'],
+            'target_display' => $card['target_display'],
+            'label'          => self::card_label($card),
+        ];
+    }
+
+    private static function card_label(array $card): string {
+        if ($card['card_type'] === 'self_strength') {
+            return $card['author_display'] . ' believes they are… ' . $card['strength_text'];
+        }
+        return $card['author_display'] . ' thinks ' . $card['target_display'] . ' is… ' . $card['strength_text'];
+    }
+
+    private static function get_next_player(int $game_id, int $current_player_id): ?array {
+        global $wpdb;
+        $smp = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+
+        $current = $wpdb->get_row($wpdb->prepare(
+            "SELECT turn_order FROM $smp WHERE id = %d", $current_player_id
+        ), ARRAY_A);
+        if (!$current) return null;
+
+        $next = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $smp WHERE game_id = %d AND turn_order > %d ORDER BY turn_order ASC LIMIT 1",
+            $game_id, (int) $current['turn_order']
+        ), ARRAY_A);
+
+        if (!$next) {
+            $next = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $smp WHERE game_id = %d ORDER BY turn_order ASC LIMIT 1",
+                $game_id
+            ), ARRAY_A);
+        }
+
+        return $next ?: null;
+    }
+
+    public static function get_board(int $game_id): array {
+        global $wpdb;
+        $smb = $wpdb->prefix . MFSD_SS_DB::TBL_SM_BOARD;
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $smb WHERE game_id = %d ORDER BY position ASC",
+            $game_id
+        ), ARRAY_A);
+
+        $positions = [];
+        foreach ($rows as $row) {
+            $face_up  = (bool) $row['is_face_up'];
+            $matched  = (bool) $row['is_matched'];
+            $revealed = $face_up || $matched;
+
+            $positions[] = [
+                'position'   => (int) $row['position'],
+                'pair_key'   => $revealed ? $row['pair_key'] : null,
+                'is_face_up' => $face_up,
+                'is_matched' => $matched,
+                'matched_by' => $matched ? (int) $row['matched_by_player_id'] : null,
+                'content'    => $revealed ? self::card_content($row) : null,
+            ];
+        }
+
+        return $positions;
+    }
+
+    public static function flip_card(int $game_id, int $player_id, int $position): array {
+        global $wpdb;
+        $smb  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_BOARD;
+        $smt  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_TURNS;
+        $smp  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+        $smg  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $smss = $wpdb->prefix . MFSD_SS_DB::TBL_SM_SELF_STRENGTHS;
+
+        $player = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $smp WHERE id = %d AND game_id = %d AND current_turn_started_at IS NOT NULL",
+            $player_id, $game_id
+        ), ARRAY_A);
+        if (!$player) return ['error' => 'not_your_turn', 'message' => 'Not your turn'];
+
+        $card = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $smb WHERE game_id = %d AND position = %d",
+            $game_id, $position
+        ), ARRAY_A);
+        if (!$card) return ['error' => 'invalid_position', 'message' => 'Invalid position'];
+        if ($card['is_matched'])  return ['error' => 'already_matched',  'message' => 'Card already matched'];
+        if ($card['is_face_up'])  return ['error' => 'already_face_up',  'message' => 'Card already face up'];
+
+        $game = $wpdb->get_row($wpdb->prepare("SELECT * FROM $smg WHERE id = %d", $game_id), ARRAY_A);
+
+        $pending_turn = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $smt WHERE game_id = %d AND player_id = %d AND flip2_position IS NULL AND timed_out = 0",
+            $game_id, $player_id
+        ), ARRAY_A);
+
+        if (!$pending_turn) {
+            // FLIP 1
+            $turn_number = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM $smt WHERE game_id = %d", $game_id
+            )) + 1;
+
+            $wpdb->insert($smt, [
+                'game_id'        => $game_id,
+                'player_id'      => $player_id,
+                'turn_number'    => $turn_number,
+                'flip1_position' => $position,
+                'started_at'     => current_time('mysql'),
+            ]);
+
+            $wpdb->update($smb, ['is_face_up' => 1], ['game_id' => $game_id, 'position' => $position]);
+
+            return [
+                'ok'          => true,
+                'flip_number' => 1,
+                'position'    => $position,
+                'content'     => self::card_content($card),
+            ];
+        }
+
+        // FLIP 2
+        $flip1_card = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $smb WHERE game_id = %d AND position = %d",
+            $game_id, (int) $pending_turn['flip1_position']
+        ), ARRAY_A);
+
+        $wpdb->update($smb, ['is_face_up' => 1], ['game_id' => $game_id, 'position' => $position]);
+
+        $is_match = ($flip1_card && $flip1_card['pair_key'] === $card['pair_key']);
+
+        $wpdb->update($smt, [
+            'flip2_position' => $position,
+            'is_match'       => $is_match ? 1 : 0,
+            'completed_at'   => current_time('mysql'),
+        ], ['id' => (int) $pending_turn['id']]);
+
+        if ($is_match) {
+            $wpdb->update($smb, [
+                'is_matched'           => 1,
+                'matched_by_player_id' => $player_id,
+                'matched_at'           => current_time('mysql'),
+            ], ['game_id' => $game_id, 'pair_key' => $card['pair_key']]);
+
+            $new_score = (int) $player['score'] + 1;
+            $wpdb->update($smp, ['score' => $new_score], ['id' => $player_id]);
+
+            $is_self_strength_match = (bool) $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM $smss WHERE game_id = %d AND player_id = %d AND strength_text = %s",
+                $game_id, $player_id, $card['strength_text']
+            ));
+
+            $game_complete    = false;
+            $winner_player_id = null;
+
+            if ($game['memory_mode'] === 'all_match') {
+                $unmatched = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM $smb WHERE game_id = %d AND is_matched = 0", $game_id
+                ));
+                if ($unmatched === 0) {
+                    $game_complete = true;
+                    $winner_row    = $wpdb->get_row($wpdb->prepare(
+                        "SELECT id FROM $smp WHERE game_id = %d ORDER BY score DESC, turn_order ASC LIMIT 1", $game_id
+                    ), ARRAY_A);
+                    $winner_player_id = $winner_row ? (int) $winner_row['id'] : $player_id;
+                }
+            } elseif ($game['memory_mode'] === 'first_to_x') {
+                if ($new_score >= (int) $game['target_matches']) {
+                    $game_complete    = true;
+                    $winner_player_id = $player_id;
+                }
+            } elseif ($game['memory_mode'] === 'timed' && $game['game_ends_at']) {
+                if (current_time('mysql') >= $game['game_ends_at']) {
+                    $game_complete = true;
+                    $winner_row    = $wpdb->get_row($wpdb->prepare(
+                        "SELECT id FROM $smp WHERE game_id = %d ORDER BY score DESC, turn_order ASC LIMIT 1", $game_id
+                    ), ARRAY_A);
+                    $winner_player_id = $winner_row ? (int) $winner_row['id'] : $player_id;
+                }
+            }
+
+            if ($game_complete) {
+                $wpdb->update($smg, [
+                    'status'           => 'complete',
+                    'winner_player_id' => $winner_player_id,
+                    'completed_at'     => current_time('mysql'),
+                ], ['id' => $game_id]);
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE $smp SET current_turn_started_at = NULL WHERE game_id = %d", $game_id
+                ));
+            } else {
+                $wpdb->update($smp, ['current_turn_started_at' => current_time('mysql')], ['id' => $player_id]);
+            }
+
+            return [
+                'ok'                     => true,
+                'flip_number'            => 2,
+                'position'               => $position,
+                'is_match'               => true,
+                'matched_pair'           => [self::card_content($flip1_card), self::card_content($card)],
+                'new_score'              => $new_score,
+                'is_self_strength_match' => $is_self_strength_match,
+                'game_complete'          => $game_complete,
+                'winner_player_id'       => $winner_player_id,
+            ];
+        }
+
+        // No match — flip both back, rotate to next player
+        $wpdb->update($smb, ['is_face_up' => 0], ['game_id' => $game_id, 'position' => $position]);
+        $wpdb->update($smb, ['is_face_up' => 0], ['game_id' => $game_id, 'position' => (int) $pending_turn['flip1_position']]);
+
+        $next = self::get_next_player($game_id, $player_id);
+        $wpdb->update($smp, ['current_turn_started_at' => null], ['id' => $player_id]);
+        if ($next) {
+            $wpdb->update($smp, ['current_turn_started_at' => current_time('mysql')], ['id' => (int) $next['id']]);
+        }
+
+        return [
+            'ok'             => true,
+            'flip_number'    => 2,
+            'position'       => $position,
+            'is_match'       => false,
+            'flip1_position' => (int) $pending_turn['flip1_position'],
+            'flip1_content'  => self::card_content($flip1_card),
+            'flip2_content'  => self::card_content($card),
+            'turn_complete'  => true,
+            'next_player_id' => $next ? (int) $next['id'] : null,
+        ];
+    }
+
+    public static function record_heartbeat(int $game_id, int $player_id): void {
+        global $wpdb;
+        $smp = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+        $wpdb->update($smp, ['last_seen_at' => current_time('mysql')], [
+            'id'      => $player_id,
+            'game_id' => $game_id,
+        ]);
+    }
+
+    // =========================================================================
+    // CRON — turn timeout + timed-mode end check (MYF-166)
+    // =========================================================================
+    public static function run_turn_timeout_check(): void {
+        global $wpdb;
+        $smg = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $smp = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+        $smt = $wpdb->prefix . MFSD_SS_DB::TBL_SM_TURNS;
+        $smb = $wpdb->prefix . MFSD_SS_DB::TBL_SM_BOARD;
+
+        $playing_games = $wpdb->get_results(
+            "SELECT * FROM $smg WHERE status = 'playing'",
+            ARRAY_A
+        );
+
+        foreach ($playing_games as $game) {
+            $game_id = (int) $game['id'];
+
+            // Timed mode: check if game_ends_at has passed
+            if ($game['memory_mode'] === 'timed' && $game['game_ends_at'] && current_time('mysql') >= $game['game_ends_at']) {
+                $winner_row = $wpdb->get_row($wpdb->prepare(
+                    "SELECT id FROM $smp WHERE game_id = %d ORDER BY score DESC, turn_order ASC LIMIT 1", $game_id
+                ), ARRAY_A);
+                $wpdb->update($smg, [
+                    'status'           => 'complete',
+                    'winner_player_id' => $winner_row ? (int) $winner_row['id'] : null,
+                    'completed_at'     => current_time('mysql'),
+                ], ['id' => $game_id]);
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE $smp SET current_turn_started_at = NULL WHERE game_id = %d", $game_id
+                ));
+                continue;
+            }
+
+            // Turn timeout: check the active player
+            $active = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $smp WHERE game_id = %d AND current_turn_started_at IS NOT NULL LIMIT 1",
+                $game_id
+            ), ARRAY_A);
+
+            if (!$active) continue;
+
+            $timeout_secs = (int) $game['turn_timeout_mins'] * 60;
+            if ((time() - strtotime($active['current_turn_started_at'])) < $timeout_secs) continue;
+
+            // Mark pending flip1 as timed out and flip card back down
+            $pending_turn = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $smt WHERE game_id = %d AND player_id = %d AND flip2_position IS NULL AND timed_out = 0",
+                $game_id, (int) $active['id']
+            ), ARRAY_A);
+
+            if ($pending_turn) {
+                $wpdb->update($smt, ['timed_out' => 1, 'completed_at' => current_time('mysql')], ['id' => (int) $pending_turn['id']]);
+                $wpdb->update($smb, ['is_face_up' => 0], [
+                    'game_id'  => $game_id,
+                    'position' => (int) $pending_turn['flip1_position'],
+                ]);
+            }
+
+            $next = self::get_next_player($game_id, (int) $active['id']);
+            $wpdb->update($smp, ['current_turn_started_at' => null], ['id' => (int) $active['id']]);
+            if ($next) {
+                $wpdb->update($smp, ['current_turn_started_at' => current_time('mysql')], ['id' => (int) $next['id']]);
+            }
+        }
+    }
 }

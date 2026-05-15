@@ -49,6 +49,9 @@ class MFSD_SS_API {
         register_rest_route($ns, '/memory/self-submit',    [['methods'=>'POST', 'callback'=>[$me,'memory_self_submit'],   'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/others-save',    [['methods'=>'POST', 'callback'=>[$me,'memory_others_save'],   'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/others-submit',  [['methods'=>'POST', 'callback'=>[$me,'memory_others_submit'], 'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/memory/board',           [['methods'=>'GET',  'callback'=>[$me,'memory_board'],          'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/memory/flip',            [['methods'=>'POST', 'callback'=>[$me,'memory_flip'],           'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/memory/heartbeat',       [['methods'=>'POST', 'callback'=>[$me,'memory_heartbeat'],      'permission_callback'=>[$me,'auth']]]);
     }
 
     public static function auth()     { return is_user_logged_in(); }
@@ -1099,14 +1102,34 @@ class MFSD_SS_API {
             ), ARRAY_A);
 
             if ($completed) {
-                $player = MFSD_SS_Memory::get_player((int) $completed['id'], $uid);
+                $cid        = (int) $completed['id'];
+                $player     = MFSD_SS_Memory::get_player($cid, $uid);
+                $player_id  = $player ? (int) $player['id'] : 0;
+                $all_p      = $wpdb->get_results($wpdb->prepare(
+                    "SELECT id, display_name, role, turn_order, score FROM $smp WHERE game_id = %d ORDER BY turn_order ASC",
+                    $cid
+                ), ARRAY_A);
                 return rest_ensure_response([
-                    'ok'          => true,
-                    'status'      => 'complete',
-                    'game_id'     => (int) $completed['id'],
-                    'game_key'    => $completed['game_key'],
-                    'game_type'   => $completed['game_type'],
-                    'player_role' => $player ? $player['role'] : 'unknown',
+                    'ok'               => true,
+                    'status'           => 'complete',
+                    'game_id'          => $cid,
+                    'game_key'         => $completed['game_key'],
+                    'game_type'        => $completed['game_type'],
+                    'player_role'      => $player ? $player['role'] : 'unknown',
+                    'winner_player_id' => $completed['winner_player_id'] ? (int) $completed['winner_player_id'] : null,
+                    'player'           => $player ? [
+                        'id'    => $player_id,
+                        'role'  => $player['role'],
+                        'score' => (int) $player['score'],
+                    ] : null,
+                    'all_players'      => array_map(fn($p) => [
+                        'id'           => (int) $p['id'],
+                        'display_name' => $p['display_name'],
+                        'role'         => $p['role'],
+                        'turn_order'   => (int) $p['turn_order'],
+                        'score'        => (int) $p['score'],
+                        'is_me'        => ((int) $p['id'] === $player_id),
+                    ], $all_p),
                 ]);
             }
 
@@ -1367,6 +1390,54 @@ class MFSD_SS_API {
         if (isset($result['error'])) return self::err($result['error'], $result['message'], 400);
 
         return rest_ensure_response($result);
+    }
+
+    // =========================================================================
+    // MEMORY GAME — GET /memory/board
+    // =========================================================================
+    public static function memory_board(WP_REST_Request $req) {
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Memory::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in game', 403);
+
+        $positions = MFSD_SS_Memory::get_board($game_id);
+        return rest_ensure_response(['ok' => true, 'positions' => $positions]);
+    }
+
+    // =========================================================================
+    // MEMORY GAME — POST /memory/flip
+    // =========================================================================
+    public static function memory_flip(WP_REST_Request $req) {
+        $uid      = get_current_user_id();
+        $game_id  = (int) $req->get_param('game_id');
+        $position = (int) $req->get_param('position');
+
+        $player = MFSD_SS_Memory::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in game', 403);
+
+        $result = MFSD_SS_Memory::flip_card($game_id, (int) $player['id'], $position);
+        if (isset($result['error'])) {
+            $status = in_array($result['error'], ['not_your_turn']) ? 409 : 400;
+            return self::err($result['error'], $result['message'], $status);
+        }
+
+        return rest_ensure_response($result);
+    }
+
+    // =========================================================================
+    // MEMORY GAME — POST /memory/heartbeat
+    // =========================================================================
+    public static function memory_heartbeat(WP_REST_Request $req) {
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Memory::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in game', 403);
+
+        MFSD_SS_Memory::record_heartbeat($game_id, (int) $player['id']);
+        return rest_ensure_response(['ok' => true]);
     }
 
     /**
