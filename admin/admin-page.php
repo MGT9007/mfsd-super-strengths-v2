@@ -38,6 +38,15 @@ if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
     update_option('mfsd_ss_snap_mode',         sanitize_text_field($_POST['snap_mode'] ?? 'quick_draw'));
     update_option('mfsd_ss_snap_quick_draw_target', max(1, (int)($_POST['snap_quick_draw_target'] ?? 5)));
     update_option('mfsd_ss_snap_timer',        max(1, min(10, (int)($_POST['snap_timer'] ?? 3))));
+    // Memory game settings
+    update_option('mfsd_ss_card_pool',             sanitize_text_field($_POST['card_pool'] ?? 'family_cards'));
+    update_option('mfsd_ss_memory_mode',           sanitize_text_field($_POST['memory_mode'] ?? 'first_to_x'));
+    update_option('mfsd_ss_memory_target_matches', max(1, (int)($_POST['memory_target_matches'] ?? 5)));
+    update_option('mfsd_ss_memory_time_limit',     max(1, (int)($_POST['memory_time_limit'] ?? 5)));
+    update_option('mfsd_ss_turn_timeout_mins',     max(1, (int)($_POST['turn_timeout_mins'] ?? 5)));
+    update_option('mfsd_ss_turn_warning_secs',     max(0, (int)($_POST['turn_warning_secs'] ?? 60)));
+    update_option('mfsd_ss_demo_mode_enabled',     isset($_POST['demo_mode_enabled']) ? '1' : '0');
+    update_option('mfsd_ss_demo_time_limit_mins',  max(1, (int)($_POST['demo_time_limit_mins'] ?? 3)));
     // Memory game SteveGPT slots
     $sg_keys = ['ss_welcome_intro','ss_welcome_chat','ss_student_summary','ss_parent_summary','ss_family_chat','ss_demo_picker','ss_demo_summary'];
     foreach ($sg_keys as $k) {
@@ -352,6 +361,13 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
         .ss-dealing-preview td, .ss-dealing-preview th { padding: 4px 8px; }
         .delete-link { color: #a00; }
         .delete-link:hover { color: #dc3232; }
+        .ss-deprecated-notice {
+            display: inline-block; background: #fffbe6; border: 1px solid #e0c36d;
+            padding: 3px 9px; border-radius: 3px; font-size: 11px; font-weight: 700;
+            color: #7a6020; text-transform: uppercase; vertical-align: middle; margin-left: 8px;
+        }
+        .ss-deprecated-section { opacity: 0.65; }
+        .ss-deprecated-section th, .ss-deprecated-section td { color: #888; }
     </style>
 
     <!-- TABS -->
@@ -394,13 +410,15 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                         <label><input type="radio" name="game_mode" value="short" <?php checked(get_option('mfsd_ss_mode','full'),'short'); ?>>
                             <strong>Family Short</strong> — Phase A only (guess target)</label><br><br>
                         <label><input type="radio" name="game_mode" value="snap" <?php checked(get_option('mfsd_ss_mode','full'),'snap'); ?>>
-                            <strong>Snap</strong> — Real-time Super Strengths Snap card game (2–6 players, all must be online)</label>
-                        <p class="description">Extended is recommended for families. Snap requires all players to be online simultaneously.</p>
+                            <strong>Snap</strong> — Real-time Super Strengths Snap card game (2–6 players, all must be online)
+                            <span class="ss-deprecated-notice">Deprecated</span></label>
+                        <p class="description">Extended is recommended for families. Snap requires all players to be online simultaneously.
+                            <br><em style="color:#92400e;">⚠️ Snap mode has been replaced by the Memory game in v5. These settings are preserved for existing games only.</em></p>
                     </td>
                 </tr>
 
-                <tr id="ss-snap-settings-row" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
-                    <th scope="row" style="padding-left:30px;">↳ Snap sub-mode</th>
+                <tr id="ss-snap-settings-row" class="ss-deprecated-section" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
+                    <th scope="row" style="padding-left:30px;">↳ Snap sub-mode <span class="ss-deprecated-notice">Deprecated</span></th>
                     <td>
                         <label><input type="radio" name="snap_mode" value="quick_draw" <?php checked(get_option('mfsd_ss_snap_mode','quick_draw'),'quick_draw'); ?>>
                             <strong>Quick Draw</strong> — Fixed number of snaps; player with most wins at the end wins</label><br><br>
@@ -409,7 +427,7 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                     </td>
                 </tr>
 
-                <tr id="ss-snap-qd-row" style="<?php echo (get_option('mfsd_ss_mode') === 'snap' && get_option('mfsd_ss_snap_mode') === 'quick_draw') ? '' : 'display:none'; ?>">
+                <tr id="ss-snap-qd-row" class="ss-deprecated-section" style="<?php echo (get_option('mfsd_ss_mode') === 'snap' && get_option('mfsd_ss_snap_mode') === 'quick_draw') ? '' : 'display:none'; ?>">
                     <th scope="row" style="padding-left:30px;">↳ Quick Draw target snaps</th>
                     <td>
                         <input type="number" name="snap_quick_draw_target" value="<?php echo (int) get_option('mfsd_ss_snap_quick_draw_target', 5); ?>" min="1" max="30" class="small-text">
@@ -417,7 +435,7 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                     </td>
                 </tr>
 
-                <tr id="ss-snap-timer-row" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
+                <tr id="ss-snap-timer-row" class="ss-deprecated-section" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
                     <th scope="row" style="padding-left:30px;">↳ Snap timer (seconds)</th>
                     <td>
                         <input type="number" name="snap_timer" value="<?php echo (int) get_option('mfsd_ss_snap_timer', 3); ?>" min="1" max="10" class="small-text">
@@ -491,6 +509,91 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                     <td>
                         <input type="number" name="ft_min_len" value="<?php echo (int) get_option('mfsd_ss_free_text_min_len',3); ?>" min="1" class="small-text"> –
                         <input type="number" name="ft_max_len" value="<?php echo (int) get_option('mfsd_ss_free_text_max_len',40); ?>" max="100" class="small-text"> characters
+                    </td>
+                </tr>
+
+                <tr><td colspan="2"><hr><h3 style="margin:0">Memory Game — Card Pool</h3>
+                    <p class="description">Controls which cards enter the matching board. §4.2</p></td></tr>
+
+                <tr>
+                    <th scope="row">Card pool</th>
+                    <td>
+                        <label><input type="radio" name="card_pool" value="family_cards" <?php checked(get_option('mfsd_ss_card_pool','family_cards'),'family_cards'); ?>>
+                            <strong>Family cards only</strong> — Cards written about other players (Phase 2) only</label><br><br>
+                        <label><input type="radio" name="card_pool" value="all_cards" <?php checked(get_option('mfsd_ss_card_pool','family_cards'),'all_cards'); ?>>
+                            <strong>All cards</strong> — Include each player's own self-strength cards (Phase 1) in the pool</label>
+                        <p class="description">Default: Family cards only. Including self-strengths increases board size significantly (see spec §9 for tile counts).</p>
+                    </td>
+                </tr>
+
+                <tr><td colspan="2"><hr><h3 style="margin:0">Memory Game — Game Mode</h3>
+                    <p class="description">Controls when the game ends and how the winner is determined. §4.3</p></td></tr>
+
+                <tr>
+                    <th scope="row">Game end condition</th>
+                    <td>
+                        <label><input type="radio" name="memory_mode" value="first_to_x" <?php checked(get_option('mfsd_ss_memory_mode','first_to_x'),'first_to_x'); ?>>
+                            <strong>First to X</strong> — First player to reach the target number of matched pairs wins</label><br><br>
+                        <label><input type="radio" name="memory_mode" value="all_match" <?php checked(get_option('mfsd_ss_memory_mode','first_to_x'),'all_match'); ?>>
+                            <strong>All match</strong> — Play until every card is matched; player with most matches wins (ties allowed)</label><br><br>
+                        <label><input type="radio" name="memory_mode" value="timed" <?php checked(get_option('mfsd_ss_memory_mode','first_to_x'),'timed'); ?>>
+                            <strong>Timed</strong> — Game ends after a set time; player with most matches at the buzzer wins</label>
+                        <p class="description">Recommended: First to X for families with 3+ players — keeps game length predictable regardless of board size.</p>
+                    </td>
+                </tr>
+
+                <tr id="ss-memory-target-row" style="<?php echo get_option('mfsd_ss_memory_mode','first_to_x') === 'first_to_x' ? '' : 'display:none'; ?>">
+                    <th scope="row" style="padding-left:30px;">↳ Matches to win</th>
+                    <td>
+                        <input type="number" name="memory_target_matches" value="<?php echo (int) get_option('mfsd_ss_memory_target_matches', 5); ?>" min="1" max="50" class="small-text">
+                        <p class="description">Number of matched pairs required to win. Default: 5. Max possible pairs = (n−1)×5 per player (family mode) or 10 (demo).</p>
+                    </td>
+                </tr>
+
+                <tr id="ss-memory-timelimit-row" style="<?php echo get_option('mfsd_ss_memory_mode','first_to_x') === 'timed' ? '' : 'display:none'; ?>">
+                    <th scope="row" style="padding-left:30px;">↳ Game time limit (minutes)</th>
+                    <td>
+                        <input type="number" name="memory_time_limit" value="<?php echo (int) get_option('mfsd_ss_memory_time_limit', 5); ?>" min="1" max="60" class="small-text">
+                        <p class="description">Duration of timed games in minutes. Default: 5.</p>
+                    </td>
+                </tr>
+
+                <tr><td colspan="2"><hr><h3 style="margin:0">Memory Game — Turn Settings</h3>
+                    <p class="description">Controls the timeout behaviour when a player goes away. §4.4</p></td></tr>
+
+                <tr>
+                    <th scope="row">Turn timeout (minutes)</th>
+                    <td>
+                        <input type="number" name="turn_timeout_mins" value="<?php echo (int) get_option('mfsd_ss_turn_timeout_mins', 5); ?>" min="1" max="60" class="small-text">
+                        <p class="description">If the active player doesn't flip their first card within this window, the turn auto-advances. Default: 5 minutes.</p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row">Turn warning (seconds before timeout)</th>
+                    <td>
+                        <input type="number" name="turn_warning_secs" value="<?php echo (int) get_option('mfsd_ss_turn_warning_secs', 60); ?>" min="0" max="300" class="small-text">
+                        <p class="description">A countdown is shown on-screen this many seconds before the turn times out. Default: 60. Set to 0 to disable the warning.</p>
+                    </td>
+                </tr>
+
+                <tr><td colspan="2"><hr><h3 style="margin:0">Memory Game — Demo Mode</h3>
+                    <p class="description">Single-player demo where Steve AI selects cards based on prior course activities. §16.9</p></td></tr>
+
+                <tr>
+                    <th scope="row">Enable demo mode</th>
+                    <td>
+                        <label><input type="checkbox" name="demo_mode_enabled" id="ss-demo-enabled" <?php checked(get_option('mfsd_ss_demo_mode_enabled','0'),'1'); ?>>
+                            Offer single-player demo to students who have completed all prerequisites</label>
+                        <p class="description">Prerequisites: Solution Lens, Word Association, and Who Am I must all be marked complete in the ordering system. Demo is a one-time activity.</p>
+                    </td>
+                </tr>
+
+                <tr id="ss-demo-timelimit-row" style="<?php echo get_option('mfsd_ss_demo_mode_enabled') === '1' ? '' : 'display:none'; ?>">
+                    <th scope="row" style="padding-left:30px;">↳ Demo time limit (minutes)</th>
+                    <td>
+                        <input type="number" name="demo_time_limit_mins" value="<?php echo (int) get_option('mfsd_ss_demo_time_limit_mins', 3); ?>" min="1" max="10" class="small-text">
+                        <p class="description">Duration of the demo game timer. Default: 3 minutes. Steve's picks are generated before the timer starts.</p>
                     </td>
                 </tr>
 
@@ -901,6 +1004,25 @@ function updateSnapRows() {
 }
 document.querySelectorAll('input[name="game_mode"]').forEach(r => r.addEventListener('change', updateSnapRows));
 document.querySelectorAll('input[name="snap_mode"]').forEach(r => r.addEventListener('change', updateSnapRows));
+
+// Show/hide memory mode dependent rows
+function updateMemoryModeRows() {
+    const mode = document.querySelector('input[name="memory_mode"]:checked')?.value;
+    const targetRow = document.getElementById('ss-memory-target-row');
+    const timeLimitRow = document.getElementById('ss-memory-timelimit-row');
+    if (targetRow) targetRow.style.display = (mode === 'first_to_x') ? '' : 'none';
+    if (timeLimitRow) timeLimitRow.style.display = (mode === 'timed') ? '' : 'none';
+}
+document.querySelectorAll('input[name="memory_mode"]').forEach(r => r.addEventListener('change', updateMemoryModeRows));
+
+// Show/hide demo time limit row
+const demoEnabledCb = document.getElementById('ss-demo-enabled');
+const demoTimeLimitRow = document.getElementById('ss-demo-timelimit-row');
+if (demoEnabledCb && demoTimeLimitRow) {
+    demoEnabledCb.addEventListener('change', function() {
+        demoTimeLimitRow.style.display = this.checked ? '' : 'none';
+    });
+}
 
 // Round limit hint updater
 const rlInput = document.getElementById('ss-round-limit');
