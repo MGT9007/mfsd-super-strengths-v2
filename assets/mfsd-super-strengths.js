@@ -12,21 +12,26 @@
 
   // ---- State ----------------------------------------------------------------
   let state = {
+    // Memory game (v5)
     gameId:        null,
-    gameStatus:    null,  // submission | dealing | playing | complete
+    gameKey:       null,   // set for memory games; null for legacy guessing game
+    gameType:      null,   // 'family' | 'demo'
+    gameStatus:    null,   // submission_self | submission_others | dealing | playing | complete
+    memoryMode:    null,   // 'all_match' | 'first_to_x' | 'timed'
+    draftSelf:     [],     // Phase 1 self-strength picks
+    // Legacy guessing game
     gameMode:      cfg.gameMode || 'full',
-    player:        null,
-    allPlayers:    [],
-    strengths:     {},    // { category: [{id,text}] }
-    // Submission
-    draftCards:    {},    // { target_player_id: [{type,text,strength_id}] }
-    currentTarget: null,
-    // Game
     hand:          [],
     currentTurn:   null,
     selectedCard:  null,
     myVote:        null,
     isConfident:   false,
+    // Shared
+    player:        null,
+    allPlayers:    [],
+    strengths:     {},     // { category: [{id,text}] }
+    draftCards:    {},     // Phase 2 cards { target_player_id: [{type,text,strength_id}] }
+    currentTarget: null,
     pollTimer:     null,
   };
 
@@ -101,27 +106,45 @@
   async function init() {
     const lv = loading();
     try {
-      const data = await api('state');
+      // v5: check memory game state first
+      const data = await api('memory/state');
       unload(lv);
 
-      if (data.status === 'no_game') {
-        renderNoGame(data);
+      if (data.status !== 'no_game') {
+        // Active or completed memory game
+        state.gameId     = data.game_id;
+        state.gameKey    = data.game_key;
+        state.gameType   = data.game_type;
+        state.gameStatus = data.status;
+        state.memoryMode = data.memory_mode;
+        state.player     = data.player;
+        state.allPlayers = data.all_players || [];
+
+        if (data.status === 'submission_self' || data.status === 'submission_others') {
+          await loadStrengths();
+        }
+
+        routeToScreen();
         return;
       }
 
-      state.gameId     = data.game_id;
-      state.gameStatus = data.status;
-      state.gameMode   = data.game_mode;
-      state.player     = data.player;
-      state.allPlayers = data.all_players || [];
-      state.hand       = data.hand || [];
+      // No memory game — check for legacy guessing game
+      try {
+        const legacy = await api('state');
+        if (legacy.status !== 'no_game') {
+          state.gameId     = legacy.game_id;
+          state.gameStatus = legacy.status;
+          state.gameMode   = legacy.game_mode;
+          state.player     = legacy.player;
+          state.allPlayers = legacy.all_players || [];
+          state.hand       = legacy.hand || [];
+          if (legacy.status === 'submission') await loadStrengths();
+          routeToScreen();
+          return;
+        }
+      } catch (_) {}
 
-      // Load strengths (needed for submission)
-      if (data.status === 'submission') {
-        await loadStrengths();
-      }
-
-      routeToScreen();
+      renderNoGame(data);
     } catch (e) {
       unload(lv);
       renderError(e.message);
@@ -135,8 +158,22 @@
 
   function routeToScreen() {
     switch (state.gameStatus) {
-      case 'submission': renderSubmissionIntro(); break;
+      // ── Memory game statuses (v5) ────────────────────────────────────────
+      case 'submission_self':
+        if (!state.player.self_submitted) {
+          if ((state.player.self_count || 0) > 0) renderSelfWrite();
+          else renderGameIntro();
+        } else {
+          renderSelfWaiting();
+        }
+        break;
+      case 'submission_others':
+        renderMemorySubmissionOverview();
+        break;
+      // ── Shared ──────────────────────────────────────────────────────────
       case 'dealing':    renderDealing(); break;
+      // ── Legacy guessing game statuses ───────────────────────────────────
+      case 'submission': renderSubmissionIntro(); break;
       case 'playing':
         if (state.gameMode === 'snap') renderSnapWaiting();
         else renderGameTable();
@@ -184,19 +221,19 @@
         startBtn.textContent = 'Starting…';
         const lv = loading('Setting up your game…');
         try {
-          const result = await api('game/start', 'POST');
+          const result = await api('memory/start', 'POST');
           unload(lv);
           if (result.ok && result.status !== 'no_game') {
-            // State returned directly — route to the right screen
             state.gameId     = result.game_id;
+            state.gameKey    = result.game_key;
+            state.gameType   = result.game_type;
             state.gameStatus = result.status;
-            state.gameMode   = result.game_mode;
+            state.memoryMode = result.memory_mode;
             state.player     = result.player;
             state.allPlayers = result.all_players || [];
             await loadStrengths();
             routeToScreen();
           } else {
-            unload(lv);
             renderError(result.message || 'Could not start game. Please try again.');
           }
         } catch (e) {
@@ -228,14 +265,19 @@
       // Poll every 15s so parent sees the game appear without refreshing
       startPoll(async () => {
         try {
-          const fresh = await api('state');
+          const fresh = await api('memory/state');
           if (fresh.status !== 'no_game') {
             stopPoll();
             state.gameId     = fresh.game_id;
+            state.gameKey    = fresh.game_key;
+            state.gameType   = fresh.game_type;
             state.gameStatus = fresh.status;
+            state.memoryMode = fresh.memory_mode;
             state.player     = fresh.player;
             state.allPlayers = fresh.all_players || [];
-            await loadStrengths();
+            if (fresh.status === 'submission_self' || fresh.status === 'submission_others') {
+              await loadStrengths();
+            }
             routeToScreen();
           }
         } catch(_) {}
@@ -261,6 +303,648 @@
   function roleEmoji(role) {
     const map = { student:'🎓', parent:'👨‍👩‍👧', carer:'🤝', sibling:'👫', other:'👤' };
     return map[role] || '👤';
+  }
+
+  // =========================================================================
+  // MEMORY GAME — INTRO (MG0) — shown before Phase 1 self-strengths
+  // Chatbot welcome if configured; otherwise static rules.
+  // =========================================================================
+  function renderGameIntro() {
+    const isStudent   = state.player.role === 'student';
+    const hasIntroBot = !!(cfg.welcomeIntroChatbotId);
+    const body        = el('div', 'ss-screen-body');
+
+    body.innerHTML = `
+      <div class="ss-game-header">
+        <div class="ss-game-title">🃏 Super Strengths Memory</div>
+        <div class="ss-game-sub">${isStudent ? 'Family Memory Game' : 'You\'ve been invited!'}</div>
+      </div>
+    `;
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+
+    const student = state.allPlayers.find(p => p.role === 'student');
+
+    if (!isStudent) {
+      inner.innerHTML += `
+        <div style="background:rgba(201,162,39,0.08);border:1px solid rgba(201,162,39,0.2);border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--ss-text);">
+          <strong style="color:var(--ss-gold-lt);">${escHtml(student ? student.display_name : 'The student')}</strong>
+          has started a Super Strengths Memory game! Start by choosing 5 strengths that describe <em>you</em>, then write 5 strength cards for each other player.
+        </div>
+      `;
+    }
+
+    // Steve AI intro panel — shown if chatbot is configured, otherwise static
+    const introPanel = el('div', 'ss-card');
+    introPanel.style.marginBottom = '16px';
+
+    if (hasIntroBot) {
+      introPanel.innerHTML = '<div class="ss-section-label" style="margin-bottom:8px;">💬 A message from Steve</div>' +
+        '<div id="ss-intro-msg" style="color:var(--ss-text);font-size:14px;line-height:1.7;">' +
+        '<div class="ss-waiting"><div class="ss-dots"><span></span><span></span><span></span></div> Steve is preparing your welcome…</div></div>';
+      inner.appendChild(introPanel);
+
+      // Fetch Steve's intro message async (fallback to static rules on error)
+      (async () => {
+        try {
+          const res = await api('memory/intro', 'GET');
+          const msgEl = document.getElementById('ss-intro-msg');
+          if (msgEl) msgEl.innerHTML = `<p style="white-space:pre-wrap;">${escHtml(res.intro_text || '')}</p>`;
+        } catch (_) {
+          const msgEl = document.getElementById('ss-intro-msg');
+          if (msgEl) msgEl.innerHTML = renderStaticIntroRules();
+        }
+      })();
+    } else {
+      introPanel.innerHTML = '<div class="ss-section-label" style="margin-bottom:8px;">How it works</div>' +
+        renderStaticIntroRules();
+      inner.appendChild(introPanel);
+    }
+
+    // Players in game
+    const playersDiv = el('div', '');
+    playersDiv.innerHTML = `
+      <div class="ss-section-label" style="margin-bottom:10px;">Players in this game</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+        ${state.allPlayers.map(p =>
+          `<div class="ss-player-pill">
+            <span style="font-size:15px;">${roleEmoji(p.role)}</span>
+            ${escHtml(p.display_name)}
+            ${p.id === state.player.id ? '<span style="color:var(--ss-text-dim);font-size:10px;">— you</span>' : ''}
+          </div>`
+        ).join('')}
+      </div>
+    `;
+    inner.appendChild(playersDiv);
+
+    const startBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '✨ Pick My Strengths →');
+    startBtn.onclick = renderSelfWrite;
+    inner.appendChild(startBtn);
+
+    body.appendChild(inner);
+    render(body);
+  }
+
+  function renderStaticIntroRules() {
+    const rules = [
+      'Start by picking <strong>5 strengths</strong> that describe yourself.',
+      'Then write <strong>5 strength cards</strong> for each person in your game.',
+      'Once everyone has submitted, the cards are shuffled into a memory board.',
+      'Take turns flipping pairs — match a card to score a point!',
+      'The player with the most matched pairs wins.',
+    ];
+    return rules.map((r, i) => `<div class="ss-intro-rule"><div class="ss-intro-rule-num">${i+1}</div><span>${r}</span></div>`).join('');
+  }
+
+  // =========================================================================
+  // MEMORY GAME — PHASE 1: SELF-WRITE (MG1)
+  // Player picks 5 strengths that describe themselves.
+  // =========================================================================
+  function renderSelfWrite() {
+    const required = 5;
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = `
+      <div class="ss-game-header">
+        <div class="ss-game-title">✨ Your Strengths</div>
+        <div class="ss-game-sub" id="ss-self-count">${state.draftSelf.length}/${required} selected</div>
+      </div>
+    `;
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+
+    inner.innerHTML += `
+      <div class="ss-card" style="margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--ss-text);">
+        Before writing about others, tell us about <strong>you</strong>.
+        Pick the 5 strengths from the list below that you feel describe you best.
+      </div>
+    `;
+
+    // Selected tags
+    const tagLabel = el('div', 'ss-section-label', 'Your selected strengths');
+    inner.appendChild(tagLabel);
+    const tagCloud = el('div', 'ss-tag-cloud');
+    tagCloud.id = 'ss-self-tags';
+    inner.appendChild(tagCloud);
+    refreshSelfTags(tagCloud, required);
+
+    // Search
+    const search = el('input', 'ss-input');
+    search.placeholder = '🔍 Search strengths…';
+    search.style.marginBottom = '10px';
+    search.oninput = () => filterSelfStrengths(search.value);
+    inner.appendChild(search);
+
+    // Category tabs
+    const cats   = Object.keys(state.strengths);
+    const tabBar = el('div', 'ss-cat-tabs');
+    const allTab = el('button', 'ss-cat-tab active', 'All');
+    allTab.dataset.cat = 'all';
+    tabBar.appendChild(allTab);
+    cats.forEach(cat => {
+      const shortNames = { 'Creative & Expressive': 'Creative', 'Mind & Learning': 'Mind', 'Leadership & Drive': 'Leadership', 'Practical & Dependable': 'Practical', 'Growth & Mindset': 'Growth', 'Social & Caring': 'Social' };
+      const btn = el('button', 'ss-cat-tab' + (cat === 'Family' ? ' family-tab' : ''), shortNames[cat] || cat);
+      btn.dataset.cat = cat;
+      tabBar.appendChild(btn);
+    });
+    inner.appendChild(tabBar);
+
+    tabBar.addEventListener('click', e => {
+      const btn = e.target.closest('.ss-cat-tab');
+      if (!btn) return;
+      tabBar.querySelectorAll('.ss-cat-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      filterSelfStrengths(search.value, btn.dataset.cat);
+    });
+
+    const grid = el('div', '');
+    grid.id = 'ss-self-grid';
+    grid.style.cssText = 'max-height:260px;overflow-y:auto;padding-right:4px;';
+    inner.appendChild(grid);
+    renderSelfStrengthList(grid);
+
+    // Save + submit
+    const saveBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '💾 Save my strengths');
+    saveBtn.style.marginTop = '16px';
+    saveBtn.id = 'ss-self-save';
+    saveBtn.onclick = () => saveSelfStrengths(false);
+    inner.appendChild(saveBtn);
+
+    const submitBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '✅ Submit & Continue →');
+    submitBtn.style.marginTop = '8px';
+    submitBtn.id = 'ss-self-submit';
+    if (state.draftSelf.length < required) submitBtn.disabled = true;
+    submitBtn.onclick = () => saveSelfStrengths(true);
+    inner.appendChild(submitBtn);
+
+    body.appendChild(inner);
+    render(body);
+
+    function filterSelfStrengths(q, cat) {
+      const activeCat = cat || tabBar.querySelector('.ss-cat-tab.active')?.dataset.cat || 'all';
+      renderSelfStrengthList(document.getElementById('ss-self-grid'), activeCat, q);
+    }
+  }
+
+  function renderSelfStrengthList(container, cat = 'all', query = '') {
+    if (!container) return;
+    const usedTexts = state.draftSelf.map(d => d.strength_text.toLowerCase());
+    container.innerHTML = '';
+
+    Object.entries(state.strengths).forEach(([category, items]) => {
+      if (cat !== 'all' && cat !== category) return;
+      const filtered = query ? items.filter(s => s.text.toLowerCase().includes(query.toLowerCase())) : items;
+      if (!filtered.length) return;
+
+      const label = el('div', 'ss-cat-label');
+      label.style.color = category === 'Family' ? 'rgba(201,162,39,0.7)' : 'rgba(155,110,243,0.7)';
+      label.textContent = category;
+      container.appendChild(label);
+
+      const grid = el('div', 'ss-strength-grid');
+      filtered.forEach(s => {
+        const used = usedTexts.includes(s.text.toLowerCase());
+        const chip = el('div', 'ss-strength-chip' + (used ? ' used' : ''), s.text + (used ? ' ✓' : ''));
+        if (!used) {
+          chip.onclick = () => {
+            if (state.draftSelf.length >= 5) return;
+            state.draftSelf.push({ strength_id: s.id, strength_text: s.text });
+            chip.classList.add('used');
+            chip.textContent = s.text + ' ✓';
+            chip.onclick = null;
+            updateSelfUI();
+          };
+        }
+        grid.appendChild(chip);
+      });
+      container.appendChild(grid);
+    });
+  }
+
+  function refreshSelfTags(container, required) {
+    container.innerHTML = '';
+    if (!state.draftSelf.length) {
+      container.innerHTML = '<span style="color:var(--ss-text-dim);font-size:12px;">No strengths selected yet — tap one below</span>';
+      return;
+    }
+    state.draftSelf.forEach(d => {
+      const tag = el('div', 'ss-tag');
+      tag.innerHTML = escHtml(d.strength_text) + '<span class="ss-tag-remove" data-text="' + escHtml(d.strength_text) + '">×</span>';
+      tag.querySelector('.ss-tag-remove').onclick = () => {
+        state.draftSelf = state.draftSelf.filter(x => x.strength_text !== d.strength_text);
+        refreshSelfTags(container, required);
+        updateSelfUI();
+        // Re-render grid to uncheck
+        const grid = document.getElementById('ss-self-grid');
+        if (grid) renderSelfStrengthList(grid, 'all');
+      };
+      container.appendChild(tag);
+    });
+  }
+
+  function updateSelfUI() {
+    const required = 5;
+    const sub = document.getElementById('ss-self-count');
+    if (sub) sub.textContent = state.draftSelf.length + '/' + required + ' selected';
+    const submitBtn = document.getElementById('ss-self-submit');
+    if (submitBtn) submitBtn.disabled = state.draftSelf.length < required;
+    const tags = document.getElementById('ss-self-tags');
+    if (tags) refreshSelfTags(tags, required);
+  }
+
+  async function saveSelfStrengths(andSubmit) {
+    if (state.draftSelf.length === 0) { alert('Please select at least one strength first.'); return; }
+    const lv = loading(andSubmit ? 'Submitting your strengths…' : 'Saving…');
+    try {
+      await api('memory/self-save', 'POST', {
+        game_id:   state.gameId,
+        strengths: state.draftSelf,
+      });
+      if (andSubmit) {
+        if (state.draftSelf.length < 5) { unload(lv); alert('Please select 5 strengths before submitting.'); return; }
+        const res = await api('memory/self-submit', 'POST', { game_id: state.gameId });
+        unload(lv);
+        if (res.all_submitted) {
+          // All players done with Phase 1 — refresh state and go to Phase 2
+          const fresh = await api('memory/state');
+          state.gameStatus = fresh.status;
+          state.player     = fresh.player || state.player;
+          state.allPlayers = fresh.all_players || state.allPlayers;
+        } else {
+          state.player = Object.assign({}, state.player, { self_submitted: true });
+        }
+        routeToScreen();
+      } else {
+        unload(lv);
+        state.player = Object.assign({}, state.player, { self_count: state.draftSelf.length });
+      }
+    } catch (e) {
+      unload(lv);
+      alert('Error: ' + e.message);
+    }
+  }
+
+  // =========================================================================
+  // MEMORY GAME — SELF WAITING (MG1W)
+  // Player submitted Phase 1, waiting for others to finish.
+  // =========================================================================
+  function renderSelfWaiting() {
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = '<div class="ss-game-header"><div class="ss-game-title">✅ Strengths Submitted!</div><div class="ss-game-sub">Waiting for everyone else…</div></div>';
+
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+
+    const statusDiv = el('div', '');
+    statusDiv.id = 'ss-self-wait-status';
+    updateSelfWaitStatus(statusDiv);
+    inner.appendChild(statusDiv);
+    body.appendChild(inner);
+    render(body);
+
+    startPoll(async () => {
+      try {
+        const data = await api('memory/state');
+        state.allPlayers = data.all_players || state.allPlayers;
+        if (data.status === 'submission_others') {
+          stopPoll();
+          state.gameStatus = data.status;
+          state.player     = data.player || state.player;
+          routeToScreen();
+        } else {
+          updateSelfWaitStatus(document.getElementById('ss-self-wait-status'));
+        }
+      } catch (_) {}
+    }, 8000);
+  }
+
+  function updateSelfWaitStatus(container) {
+    if (!container) return;
+    container.innerHTML = `
+      <div class="ss-section-label" style="margin-bottom:10px;">Phase 1 — choosing their own strengths</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        ${state.allPlayers.map(p =>
+          `<div class="ss-player-pill">
+            <span class="status-dot ${p.self_submitted ? 'submitted' : 'pending'}"></span>
+            ${escHtml(p.display_name)}
+            <span style="color:var(--ss-text-dim);font-size:10px;">${p.self_submitted ? '— done ✓' : '— choosing…'}</span>
+          </div>`
+        ).join('')}
+      </div>
+      <div class="ss-waiting"><div class="ss-dots"><span></span><span></span><span></span></div>
+        Waiting for everyone to finish Phase 1…
+      </div>
+    `;
+  }
+
+  // =========================================================================
+  // MEMORY GAME — PHASE 2 OVERVIEW (MG2)
+  // Shown when game status = 'submission_others'
+  // =========================================================================
+  function renderMemorySubmissionOverview() {
+    const targets     = state.allPlayers.filter(p => p.id !== state.player.id);
+    const cardCounts  = state.player.card_counts || {};
+    const required    = 5;
+    const allComplete = targets.every(t => (cardCounts[t.id] || 0) >= required);
+
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = `
+      <div class="ss-game-header">
+        <div class="ss-game-title">✍️ Write Strength Cards</div>
+        <div class="ss-game-sub">Phase 2 — ${required} cards per person</div>
+      </div>
+    `;
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+
+    // Phase 1 completion status
+    const phase1Done = state.allPlayers.every(p => p.self_submitted);
+    if (!phase1Done) {
+      const pending1 = state.allPlayers.filter(p => !p.self_submitted);
+      inner.innerHTML += `
+        <div style="background:rgba(109,63,192,0.1);border:1px solid rgba(109,63,192,0.25);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ss-text);">
+          <strong style="color:var(--ss-gold-lt);">⏳ Phase 1 in progress</strong> —
+          ${pending1.map(p => escHtml(p.display_name)).join(', ')} ${pending1.length === 1 ? 'is' : 'are'} still picking their own strengths.
+          You can write cards for others in the meantime!
+        </div>
+      `;
+    }
+
+    // Target list
+    const list = el('div', 'ss-target-list');
+    targets.forEach(target => {
+      const saved = cardCounts[target.id] || 0;
+      const done  = saved >= required;
+      const card  = el('div', 'ss-target-card' + (done ? ' complete' : ''));
+      card.innerHTML = `
+        <div>
+          <div class="ss-target-name">${escHtml(target.display_name)}</div>
+          <div class="ss-target-role">${escHtml(target.role)}</div>
+        </div>
+        <div class="ss-target-progress">
+          <div class="ss-progress-bar"><div class="ss-progress-fill" style="width:${Math.min(100, saved/required*100)}%"></div></div>
+          <div class="ss-progress-label">${saved}/${required} ${done ? '✓' : ''}</div>
+        </div>
+      `;
+      card.onclick = () => renderMemoryPickStrengths(target);
+      list.appendChild(card);
+    });
+    inner.appendChild(list);
+
+    if (allComplete && !state.player.others_submitted) {
+      const reviewBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '📋 Review & Submit →');
+      reviewBtn.style.marginTop = '14px';
+      reviewBtn.onclick = renderMemoryReview;
+      inner.appendChild(reviewBtn);
+    } else if (state.player.others_submitted) {
+      inner.appendChild(renderMemorySubmissionWaitingInline());
+    }
+
+    body.appendChild(inner);
+    render(body);
+  }
+
+  // =========================================================================
+  // MEMORY GAME — PHASE 2 CARD PICKER
+  // Reuses the existing strength list but saves to memory/others-save
+  // =========================================================================
+  function renderMemoryPickStrengths(target) {
+    state.currentTarget = target;
+    const required = 5;
+    const draft    = state.draftCards[target.id] || [];
+
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = `
+      <div class="ss-game-header">
+        <div class="ss-game-title">✍️ Cards for: <span class="highlight">${escHtml(target.display_name)}</span></div>
+        <div class="ss-game-sub" id="ss-card-count">${draft.length}/${required} added</div>
+      </div>
+    `;
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+
+    const tagLabel = el('div', 'ss-section-label', 'Your cards for ' + target.display_name);
+    inner.appendChild(tagLabel);
+    const tagCloud = el('div', 'ss-tag-cloud');
+    tagCloud.id = 'ss-tags';
+    inner.appendChild(tagCloud);
+    refreshTags(tagCloud, target, required);
+
+    const search = el('input', 'ss-input');
+    search.placeholder = '🔍 Search all strengths…';
+    search.style.marginBottom = '10px';
+    search.oninput = () => filterStrengths(search.value);
+    inner.appendChild(search);
+
+    const cats   = Object.keys(state.strengths);
+    const tabBar = el('div', 'ss-cat-tabs');
+    const allTab = el('button', 'ss-cat-tab active', 'All');
+    allTab.dataset.cat = 'all';
+    tabBar.appendChild(allTab);
+    cats.forEach(cat => {
+      const shortNames = { 'Creative & Expressive': 'Creative', 'Mind & Learning': 'Mind', 'Leadership & Drive': 'Leadership', 'Practical & Dependable': 'Practical', 'Growth & Mindset': 'Growth', 'Social & Caring': 'Social' };
+      const btn = el('button', 'ss-cat-tab' + (cat === 'Family' ? ' family-tab' : ''), shortNames[cat] || cat);
+      btn.dataset.cat = cat;
+      tabBar.appendChild(btn);
+    });
+    inner.appendChild(tabBar);
+    tabBar.addEventListener('click', e => {
+      const btn = e.target.closest('.ss-cat-tab');
+      if (!btn) return;
+      tabBar.querySelectorAll('.ss-cat-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      filterStrengths(search.value, btn.dataset.cat);
+    });
+
+    const grid = el('div', '');
+    grid.id = 'ss-strength-grid';
+    grid.style.cssText = 'max-height:260px;overflow-y:auto;padding-right:4px;';
+    inner.appendChild(grid);
+    renderStrengthList(grid, target, 'all');
+
+    if (cfg.ftEnabled) {
+      const ftSection = el('div', '');
+      ftSection.style.cssText = 'background:rgba(201,162,39,0.08);border:1px solid rgba(201,162,39,0.2);border-radius:8px;padding:12px 14px;margin-top:14px;';
+      ftSection.innerHTML = '<div class="ss-section-label" style="color:var(--ss-gold-lt);margin-bottom:8px;">✏️ Add your own (free text)</div>';
+      const ftRow = el('div', '');
+      ftRow.style.cssText = 'display:flex;gap:8px;';
+      const ftInput = el('input', 'ss-input');
+      ftInput.placeholder = 'Type a strength (' + cfg.ftMinLen + '–' + cfg.ftMaxLen + ' chars)';
+      ftInput.style.flex = '1';
+      const ftBtn = el('button', 'ss-btn ss-btn-ghost ss-btn-sm', 'Add');
+      const ftMsg = el('div', '');
+      ftMsg.id = 'ss-ft-msg';
+      ftBtn.onclick = async () => {
+        const txt = ftInput.value.trim();
+        if (txt.length < cfg.ftMinLen || txt.length > cfg.ftMaxLen) {
+          showFtError(ftMsg, 'block', null, 'Please enter between ' + cfg.ftMinLen + ' and ' + cfg.ftMaxLen + ' characters.'); return;
+        }
+        ftBtn.disabled = true;
+        const vr = await api('validate-text', 'POST', { text: txt });
+        ftBtn.disabled = false;
+        const result = vr.result;
+        if (result.action === 'block') { showFtError(ftMsg, 'block', '🚫', result.message); ftInput.classList.add('error'); return; }
+        if (result.action === 'flag') {
+          showFtError(ftMsg, 'flag', '⏳', result.message);
+          addDraftCard(target.id, { type: 'free', text: txt, strength_id: null, flagged: true });
+        } else {
+          addDraftCard(target.id, { type: 'free', text: txt, strength_id: null });
+        }
+        ftInput.value = ''; ftInput.classList.remove('error'); ftMsg.innerHTML = '';
+        refreshTags(document.getElementById('ss-tags'), target, required);
+        const sub = document.getElementById('ss-card-count');
+        if (sub) sub.textContent = (state.draftCards[target.id]||[]).length + '/' + required + ' added';
+      };
+      ftRow.appendChild(ftInput); ftRow.appendChild(ftBtn);
+      ftSection.appendChild(ftRow); ftSection.appendChild(ftMsg);
+      inner.appendChild(ftSection);
+    }
+
+    const btnGrp = el('div', 'ss-btn-group');
+    const saveBtn = el('button', 'ss-btn ss-btn-gold', '💾 Save Cards for ' + target.display_name);
+    saveBtn.onclick = () => saveMemoryTargetCards(target);
+    const backBtn = el('button', 'ss-btn ss-btn-ghost', '↩ Back to overview');
+    backBtn.onclick = renderMemorySubmissionOverview;
+    btnGrp.appendChild(saveBtn); btnGrp.appendChild(backBtn);
+    inner.appendChild(btnGrp);
+
+    body.appendChild(inner);
+    render(body);
+
+    function filterStrengths(q, cat) {
+      const activeCat = cat || tabBar.querySelector('.ss-cat-tab.active')?.dataset.cat || 'all';
+      renderStrengthList(document.getElementById('ss-strength-grid'), target, activeCat, q);
+    }
+  }
+
+  async function saveMemoryTargetCards(target) {
+    const draft    = state.draftCards[target.id] || [];
+    const required = 5;
+    if (draft.length < required) { alert('Please write exactly ' + required + ' cards for ' + target.display_name + '.'); return; }
+    const lv = loading('Saving cards for ' + target.display_name + '…');
+    try {
+      const res = await api('memory/others-save', 'POST', {
+        game_id:          state.gameId,
+        target_player_id: target.id,
+        strengths:        draft,
+      });
+      unload(lv);
+      if (!state.player.card_counts) state.player.card_counts = {};
+      state.player.card_counts[target.id] = res.saved;
+      renderMemorySubmissionOverview();
+    } catch (e) {
+      unload(lv);
+      alert('Error saving: ' + e.message);
+    }
+  }
+
+  // =========================================================================
+  // MEMORY GAME — PHASE 2 REVIEW
+  // =========================================================================
+  function renderMemoryReview() {
+    const targets  = state.allPlayers.filter(p => p.id !== state.player.id);
+    const required = 5;
+
+    const body = el('div', 'ss-screen-body');
+    body.innerHTML = '<div class="ss-game-header"><div class="ss-game-title">📋 Review Your Cards</div><div class="ss-game-sub">Check everything before locking</div></div>';
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+
+    let total = 0;
+    targets.forEach(target => {
+      const draft = state.draftCards[target.id] || [];
+      total += draft.length;
+      const section = el('div', 'ss-card');
+      section.style.marginBottom = '12px';
+      section.innerHTML = `<div class="ss-section-label" style="margin-bottom:8px;">Cards for ${escHtml(target.display_name)} · ${draft.length}/${required}</div>`;
+      if (draft.length) {
+        const tags = el('div', 'ss-tag-cloud');
+        draft.forEach(d => {
+          const t = el('div', 'ss-tag' + (d.flagged ? ' pending' : ''), d.text + (d.flagged ? ' ⏳' : ''));
+          tags.appendChild(t);
+        });
+        section.appendChild(tags);
+      }
+      const editBtn = el('button', 'ss-btn ss-btn-ghost ss-btn-sm', '✏️ Edit');
+      editBtn.style.marginTop = '8px';
+      editBtn.onclick = () => renderMemoryPickStrengths(target);
+      section.appendChild(editBtn);
+      inner.appendChild(section);
+    });
+
+    const submitBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '🔒 Submit All ' + total + ' Cards');
+    submitBtn.style.marginTop = '6px';
+    submitBtn.onclick = submitMemoryCards;
+    inner.appendChild(submitBtn);
+
+    const note = el('p', '', 'Once submitted, your cards are locked and the board will be built.');
+    note.style.cssText = 'text-align:center;font-size:12px;color:var(--ss-text-dim);margin-top:8px;';
+    inner.appendChild(note);
+
+    const backBtn = el('button', 'ss-btn ss-btn-ghost', '↩ Back to overview');
+    backBtn.style.marginTop = '8px';
+    backBtn.onclick = renderMemorySubmissionOverview;
+    inner.appendChild(backBtn);
+
+    body.appendChild(inner);
+    render(body);
+  }
+
+  async function submitMemoryCards() {
+    const lv = loading('Submitting your cards…');
+    try {
+      const res = await api('memory/others-submit', 'POST', { game_id: state.gameId });
+      unload(lv);
+      state.player = Object.assign({}, state.player, { others_submitted: true });
+      state.allPlayers = res.players || state.allPlayers;
+
+      if (res.all_submitted) {
+        const fresh = await api('memory/state');
+        state.gameStatus = fresh.status;
+        state.player     = fresh.player  || state.player;
+        state.allPlayers = fresh.all_players || state.allPlayers;
+        routeToScreen();
+      } else {
+        renderMemorySubmissionOverview();
+      }
+    } catch (e) {
+      unload(lv);
+      alert('Error: ' + e.message);
+    }
+  }
+
+  function renderMemorySubmissionWaitingInline() {
+    const div = el('div', '');
+    div.style.marginTop = '14px';
+    const pending = state.allPlayers.filter(p => !p.others_submitted);
+    div.innerHTML = `
+      <div class="ss-reveal-banner info">✅ You've submitted! Waiting for ${pending.length} more player${pending.length !== 1 ? 's' : ''}…</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+        ${state.allPlayers.map(p =>
+          `<div class="ss-player-pill">
+            <span class="status-dot ${p.others_submitted ? 'submitted' : 'pending'}"></span>
+            ${escHtml(p.display_name)}
+            <span style="color:var(--ss-text-dim);font-size:10px;">${p.others_submitted ? '— submitted ✓' : '— writing…'}</span>
+          </div>`
+        ).join('')}
+      </div>
+      <div class="ss-waiting" style="margin-top:12px;"><div class="ss-dots"><span></span><span></span><span></span></div> Building the board when everyone's done…</div>
+    `;
+    startPoll(async () => {
+      try {
+        const data = await api('memory/state');
+        state.allPlayers = data.all_players || state.allPlayers;
+        if (data.status === 'dealing' || data.status === 'playing') {
+          stopPoll();
+          state.gameStatus = data.status;
+          state.player     = data.player || state.player;
+          routeToScreen();
+        } else {
+          // Refresh overview to update status dots
+          renderMemorySubmissionOverview();
+        }
+      } catch (_) {}
+    }, 8000);
+    return div;
   }
 
   // =========================================================================
@@ -818,16 +1502,21 @@
     body.appendChild(inner);
     render(body);
 
+    const stateEndpoint = state.gameKey ? 'memory/state' : 'state';
     startPoll(async () => {
       try {
-        const data = await api('state');
+        const data = await api(stateEndpoint);
         if (data.status === 'playing') {
           stopPoll();
           state.gameStatus = 'playing';
-          state.gameMode   = data.game_mode || state.gameMode;
-          state.player     = data.player    || state.player;
           state.allPlayers = data.all_players || state.allPlayers;
-          state.hand       = data.hand || [];
+          if (state.gameKey) {
+            state.player = data.player || state.player;
+          } else {
+            state.gameMode = data.game_mode || state.gameMode;
+            state.player   = data.player    || state.player;
+            state.hand     = data.hand || [];
+          }
           routeToScreen();
         }
       } catch(_) {}

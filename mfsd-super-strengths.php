@@ -93,6 +93,7 @@ final class MFSD_Super_Strengths {
             'nonce'                => wp_create_nonce('wp_rest'),
             'userId'               => $user_id,
             'displayName'          => $user->display_name,
+            'playerAge'            => $age,
             'ftEnabled'            => $ft_enabled,
             'ftMax'                => (int) get_option('mfsd_ss_free_text_max', 2),
             'ftMinLen'             => (int) get_option('mfsd_ss_free_text_min_len', 3),
@@ -107,6 +108,15 @@ final class MFSD_Super_Strengths {
             'badgesUrl'            => home_url('/badges/'),
             'portalUrl'            => home_url('/about/parent-portal-home/'),
             'courseId'             => 1,
+            // Memory game (v5) config
+            'memoryMode'           => get_option('mfsd_ss_memory_mode', 'first_to_x'),
+            'targetMatches'        => (int) get_option('mfsd_ss_memory_target_matches', 5),
+            'timeLimitMins'        => (int) get_option('mfsd_ss_memory_time_limit', 5),
+            'turnTimeoutMins'      => (int) get_option('mfsd_ss_turn_timeout_mins', 5),
+            'demoModeEnabled'      => get_option('mfsd_ss_demo_mode_enabled', '0') === '1',
+            'demoTimeLimitMins'    => (int) get_option('mfsd_ss_demo_time_limit_mins', 3),
+            'welcomeIntroChatbotId'=> get_option('mfsd_stevegpt_map_ss_welcome_intro', ''),
+            'welcomeChatChatbotId' => get_option('mfsd_stevegpt_map_ss_welcome_chat', ''),
         ]);
 
         return '<div id="mfsd-ss-root"></div>';

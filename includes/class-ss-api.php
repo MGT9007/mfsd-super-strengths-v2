@@ -44,6 +44,7 @@ class MFSD_SS_API {
         // ── Memory game (v5) ─────────────────────────────────────────────────
         register_rest_route($ns, '/memory/state',         [['methods'=>'GET',  'callback'=>[$me,'memory_state'],         'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/start',          [['methods'=>'POST', 'callback'=>[$me,'memory_start'],         'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/memory/intro',          [['methods'=>'GET',  'callback'=>[$me,'memory_intro'],         'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/self-save',      [['methods'=>'POST', 'callback'=>[$me,'memory_self_save'],     'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/self-submit',    [['methods'=>'POST', 'callback'=>[$me,'memory_self_submit'],   'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/others-save',    [['methods'=>'POST', 'callback'=>[$me,'memory_others_save'],   'permission_callback'=>[$me,'auth']]]);
@@ -1251,6 +1252,54 @@ class MFSD_SS_API {
         }
 
         return self::memory_state();
+    }
+
+    // =========================================================================
+    // MEMORY GAME — GET /memory/intro
+    // Generates Steve's welcome intro text via SteveGPT.
+    // Returns fallback static text if chatbot is not configured or API fails.
+    // =========================================================================
+    public static function memory_intro() {
+        $uid        = get_current_user_id();
+        $user       = get_userdata($uid);
+        $name       = $user->display_name;
+        $age        = (int) get_user_meta($uid, 'mfsd_age', true);
+        $chatbot_id = get_option('mfsd_stevegpt_map_ss_welcome_intro', '');
+
+        if (!$chatbot_id || !isset($GLOBALS['stevegtp'])) {
+            return rest_ensure_response(['ok' => true, 'intro_text' => '', 'source' => 'fallback']);
+        }
+
+        $game = MFSD_SS_Memory::get_active_game($uid);
+        $mode = $game ? $game['memory_mode'] : get_option('mfsd_ss_memory_mode', 'first_to_x');
+
+        $mode_desc = [
+            'all_match'  => 'match all the pairs to end the game',
+            'first_to_x' => 'be the first to match ' . get_option('mfsd_ss_memory_target_matches', 5) . ' pairs',
+            'timed'      => 'match as many pairs as possible in ' . get_option('mfsd_ss_memory_time_limit', 5) . ' minutes',
+        ];
+        $end_cond = $mode_desc[$mode] ?? 'complete the memory board';
+
+        $prompt = "You are Steve Sallis, warm coach on the My Future Self platform.\n\n"
+            . "Write a short, encouraging welcome for {$name} (age {$age}) who is about to start Super Strengths Memory — a family card game.\n\n"
+            . "Phase 1: Each player picks 5 strengths that describe themselves.\n"
+            . "Phase 2: Each player writes 5 strength cards for every other family member.\n"
+            . "Then everyone plays a memory matching game — {$end_cond}.\n\n"
+            . "Keep it to 3–4 sentences. Warm, age-appropriate. Mention that picking their own strengths first is powerful.\n"
+            . "End with '— Steve'. No ** or ## formatting.";
+
+        try {
+            $ai = $GLOBALS['stevegtp'];
+            $intro_text = $ai->simpleTextQuery($prompt, $chatbot_id);
+        } catch (\Exception $e) {
+            $intro_text = '';
+        }
+
+        return rest_ensure_response([
+            'ok'         => true,
+            'intro_text' => $intro_text,
+            'source'     => $intro_text ? 'ai' : 'fallback',
+        ]);
     }
 
     // =========================================================================
