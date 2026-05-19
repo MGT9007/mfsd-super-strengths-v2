@@ -26,7 +26,6 @@ $notice = '';
 
 // ── Save configuration ────────────────────────────────────────────────────────
 if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
-    update_option('mfsd_ss_mode',              sanitize_text_field($_POST['game_mode'] ?? 'full'));
     update_option('mfsd_ss_round_limit',       max(1, (int)($_POST['round_limit'] ?? 3)));
     update_option('mfsd_ss_turn_timeout',      max(1, (int)($_POST['turn_timeout'] ?? 24)));
     update_option('mfsd_ss_vote_timeout',      max(1, (int)($_POST['vote_timeout'] ?? 24)));
@@ -393,17 +392,6 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
             <input type="hidden" name="ss_save_config" value="1">
 
             <table class="form-table"><tbody>
-                <tr>
-                    <th scope="row">Game Mode</th>
-                    <td>
-                        <label><input type="radio" name="game_mode" value="full" <?php checked(get_option('mfsd_ss_mode','full'),'full'); ?>>
-                            <strong>Extended</strong> — Phase A (guess target) + Phase B (guess author)</label><br><br>
-                        <label><input type="radio" name="game_mode" value="short" <?php checked(get_option('mfsd_ss_mode','full'),'short'); ?>>
-                            <strong>Family Short</strong> — Phase A only (guess target)</label><br><br>
-                        <p class="description">Extended is recommended for families.</p>
-                    </td>
-                </tr>
-
                 <tr>
                     <th scope="row">Round limit <br><small style="font-weight:400">(5–6 player games)</small></th>
                     <td>
