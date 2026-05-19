@@ -18,6 +18,7 @@ require_once MFSD_SS_PATH . 'includes/class-ss-game.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-memory.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-api.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-summary.php';
+require_once MFSD_SS_PATH . 'includes/class-ss-badges.php';
 
 final class MFSD_Super_Strengths {
 

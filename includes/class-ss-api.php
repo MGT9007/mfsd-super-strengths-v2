@@ -52,6 +52,8 @@ class MFSD_SS_API {
         register_rest_route($ns, '/memory/board',           [['methods'=>'GET',  'callback'=>[$me,'memory_board'],          'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/flip',            [['methods'=>'POST', 'callback'=>[$me,'memory_flip'],           'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/heartbeat',       [['methods'=>'POST', 'callback'=>[$me,'memory_heartbeat'],      'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/memory/summary',         [['methods'=>'GET',  'callback'=>[$me,'memory_summary'],         'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/memory/award-badge',     [['methods'=>'POST', 'callback'=>[$me,'memory_award_badge'],     'permission_callback'=>[$me,'auth']]]);
     }
 
     public static function auth()     { return is_user_logged_in(); }
@@ -1438,6 +1440,136 @@ class MFSD_SS_API {
 
         MFSD_SS_Memory::record_heartbeat($game_id, (int) $player['id']);
         return rest_ensure_response(['ok' => true]);
+    }
+
+    // =========================================================================
+    // MEMORY GAME — GET /memory/summary
+    // Role-aware: student gets own summary; parent gets student + own summaries.
+    // AI summary is generated (or fetched from cache) via MFSD_SS_Summary.
+    // =========================================================================
+    public static function memory_summary(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $smg = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+
+        $player = MFSD_SS_Memory::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in game', 403);
+
+        $game = $wpdb->get_row($wpdb->prepare("SELECT status FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
+        if (!$game || $game['status'] !== 'complete') {
+            return self::err('game_not_complete', 'Game not yet complete', 400);
+        }
+
+        $player_id = (int) $player['id'];
+        $data      = MFSD_SS_Summary::get_summary_data($game_id, $player_id);
+        if (empty($data)) return self::err('no_data', 'Summary data not available', 500);
+
+        $summary     = MFSD_SS_Summary::get_or_generate_summary($game_id, $player_id);
+        $viewer_role = $data['viewer_role'];
+
+        if ($viewer_role === 'student') {
+            $family_wrote_about_me = [];
+            foreach ($data['parents'] as $parent) {
+                foreach ($parent['cards_about_student'] as $strength_text) {
+                    $family_wrote_about_me[] = [
+                        'strength_text'  => $strength_text,
+                        'author_display' => $parent['display_name'],
+                    ];
+                }
+            }
+
+            return rest_ensure_response([
+                'ok'                   => true,
+                'player_role'          => 'student',
+                'student_name'         => $data['student']['display_name'],
+                'self_strengths'       => $data['student']['self_strengths'],
+                'family_wrote_about_me'=> $family_wrote_about_me,
+                'sections'             => $summary['sections'] ?? [],
+                'ai_summary'           => $summary['raw'] ?? '',
+                'lens_data_available'  => $data['lens']['available'] ?? false,
+            ]);
+        }
+
+        // Parent view ─────────────────────────────────────────────────────────
+        $smsu        = $wpdb->prefix . MFSD_SS_DB::TBL_SM_SUMMARIES;
+        $student_pid = (int) $data['student']['id'];
+
+        // Student summary — return stored only (generate when student views their screen)
+        $student_stored     = $wpdb->get_row($wpdb->prepare(
+            "SELECT ai_summary FROM {$smsu} WHERE game_id = %d AND player_id = %d",
+            $game_id, $student_pid
+        ), ARRAY_A);
+        $student_ai_summary = $student_stored ? ($student_stored['ai_summary'] ?? '') : '';
+
+        $this_parent = null;
+        foreach ($data['parents'] as $parent) {
+            if ((int) $parent['id'] === $player_id) {
+                $this_parent = $parent;
+                break;
+            }
+        }
+
+        $family_wrote_about_student = [];
+        foreach ($data['parents'] as $parent) {
+            foreach ($parent['cards_about_student'] as $strength_text) {
+                $family_wrote_about_student[] = [
+                    'strength_text'  => $strength_text,
+                    'author_display' => $parent['display_name'],
+                ];
+            }
+        }
+
+        $student_wrote_about_parent = [];
+        if ($this_parent) {
+            foreach ($this_parent['student_cards_about_this_parent'] as $strength_text) {
+                $student_wrote_about_parent[] = [
+                    'strength_text'  => $strength_text,
+                    'author_display' => $data['student']['display_name'],
+                ];
+            }
+        }
+
+        return rest_ensure_response([
+            'ok'                         => true,
+            'player_role'                => 'parent',
+            'player_name'                => $player['display_name'],
+            'student_name'               => $data['student']['display_name'],
+            'student_self_strengths'     => $data['student']['self_strengths'],
+            'family_wrote_about_student' => $family_wrote_about_student,
+            'student_ai_summary'         => $student_ai_summary,
+            'parent_self_strengths'      => $this_parent ? $this_parent['self_strengths'] : [],
+            'student_wrote_about_parent' => $student_wrote_about_parent,
+            'sections'                   => $summary['sections'] ?? [],
+            'parent_ai_summary'          => $summary['raw'] ?? '',
+            'lens_data_available'        => $data['lens']['available'] ?? false,
+        ]);
+    }
+
+    // =========================================================================
+    // MEMORY GAME — POST /memory/award-badge
+    // Called by frontend after student views summary. Students only.
+    // =========================================================================
+    public static function memory_award_badge(WP_REST_Request $req) {
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Memory::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in game', 403);
+
+        if ($player['role'] !== 'student') {
+            return rest_ensure_response(['ok' => true, 'badge_earned' => false, 'badge_image_url' => '']);
+        }
+
+        $slug = MFSD_SS_Badges::award_completion($uid, $game_id);
+        $url  = $slug ? MFSD_SS_URL . 'assets/badges/' . $slug . '.png' : '';
+
+        return rest_ensure_response([
+            'ok'              => true,
+            'badge_earned'    => (bool) $slug,
+            'badge_image_url' => $url,
+        ]);
     }
 
     /**

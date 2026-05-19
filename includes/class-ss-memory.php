@@ -619,6 +619,9 @@ class MFSD_SS_Memory {
                 $wpdb->query($wpdb->prepare(
                     "UPDATE $smp SET current_turn_started_at = NULL WHERE game_id = %d", $game_id
                 ));
+                if ($winner_player_id) {
+                    MFSD_SS_Badges::award_winners_on_game_end($game_id, $game['memory_mode'], $winner_player_id);
+                }
             } else {
                 $wpdb->update($smp, ['current_turn_started_at' => current_time('mysql')], ['id' => $player_id]);
             }
@@ -699,6 +702,10 @@ class MFSD_SS_Memory {
                 $wpdb->query($wpdb->prepare(
                     "UPDATE $smp SET current_turn_started_at = NULL WHERE game_id = %d", $game_id
                 ));
+                $cron_winner_id = $winner_row ? (int) $winner_row['id'] : 0;
+                if ($cron_winner_id) {
+                    MFSD_SS_Badges::award_winners_on_game_end($game_id, $game['memory_mode'], $cron_winner_id);
+                }
                 continue;
             }
 
