@@ -54,6 +54,7 @@ class MFSD_SS_API {
         register_rest_route($ns, '/memory/heartbeat',       [['methods'=>'POST', 'callback'=>[$me,'memory_heartbeat'],      'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/summary',         [['methods'=>'GET',  'callback'=>[$me,'memory_summary'],         'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/award-badge',     [['methods'=>'POST', 'callback'=>[$me,'memory_award_badge'],     'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/memory/chat-widget',    [['methods'=>'GET',  'callback'=>[$me,'memory_chat_widget'],    'permission_callback'=>[$me,'auth']]]);
     }
 
     public static function auth()     { return is_user_logged_in(); }
@@ -1559,16 +1560,62 @@ class MFSD_SS_API {
         if (!$player) return self::err('not_in_game', 'Not in game', 403);
 
         if ($player['role'] !== 'student') {
-            return rest_ensure_response(['ok' => true, 'badge_earned' => false, 'badge_image_url' => '']);
+            return rest_ensure_response(['ok' => true, 'completion_earned' => false, 'winner_badge_slug' => null]);
         }
 
-        $slug = MFSD_SS_Badges::award_completion($uid, $game_id);
-        $url  = $slug ? MFSD_SS_URL . 'assets/badges/' . $slug . '.png' : '';
+        $completion_slug = MFSD_SS_Badges::award_completion($uid, $game_id);
+        $winner_slug     = MFSD_SS_Badges::get_awarded_badge($uid, 'winner');
+
+        return rest_ensure_response([
+            'ok'                   => true,
+            'completion_earned'    => (bool) $completion_slug,
+            'completion_badge_url' => $completion_slug ? MFSD_SS_URL . 'assets/badges/' . $completion_slug . '.png' : '',
+            'winner_badge_slug'    => $winner_slug ?: null,
+            'winner_badge_url'     => $winner_slug ? MFSD_SS_URL . 'assets/badges/' . $winner_slug . '.png' : '',
+        ]);
+    }
+
+    // =========================================================================
+    // MEMORY GAME — GET /memory/chat-widget
+    // Returns chatbot config and freshly minted conversation_id for the
+    // role-appropriate summary chat widget.
+    // =========================================================================
+    public static function memory_chat_widget(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Memory::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in game', 403);
+
+        $is_student = ($player['role'] === 'student');
+        $opt_key    = $is_student
+            ? 'mfsd_stevegpt_map_ss_student_summary_chat'
+            : 'mfsd_stevegpt_map_ss_parent_summary_chat';
+        $chatbot_id = get_option($opt_key, '');
+
+        if (!$chatbot_id) {
+            return rest_ensure_response(['ok' => false, 'reason' => 'not_configured']);
+        }
+
+        $context         = MFSD_SS_Summary::build_chat_context($game_id, (int) $player['id']);
+        $conversation_id = 'conv_' . bin2hex(random_bytes(8));
+
+        $chatbot    = $wpdb->get_row($wpdb->prepare(
+            "SELECT appearance FROM {$wpdb->prefix}stevegpt_chatbots WHERE chatbot_id = %s AND is_active = 1",
+            $chatbot_id
+        ), ARRAY_A);
+        $appearance = $chatbot ? (json_decode($chatbot['appearance'], true) ?: []) : [];
 
         return rest_ensure_response([
             'ok'              => true,
-            'badge_earned'    => (bool) $slug,
-            'badge_image_url' => $url,
+            'chatbot_id'      => $chatbot_id,
+            'conversation_id' => $conversation_id,
+            'context'         => $context,
+            'avatar'          => $appearance['avatar'] ?? '💬',
+            'avatar_image'    => $appearance['avatar_image'] ?? '',
+            'ai_name'         => $appearance['ai_name'] ?? 'Steve',
+            'greeting'        => $appearance['start_sentence'] ?? 'Hi! Ask me anything about your Super Strengths.',
         ]);
     }
 

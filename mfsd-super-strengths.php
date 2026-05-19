@@ -118,8 +118,10 @@ final class MFSD_Super_Strengths {
             'turnTimeoutMins'      => (int) get_option('mfsd_ss_turn_timeout_mins', 5),
             'demoModeEnabled'      => get_option('mfsd_ss_demo_mode_enabled', '0') === '1',
             'demoTimeLimitMins'    => (int) get_option('mfsd_ss_demo_time_limit_mins', 3),
-            'welcomeIntroChatbotId'=> get_option('mfsd_stevegpt_map_ss_welcome_intro', ''),
-            'welcomeChatChatbotId' => get_option('mfsd_stevegpt_map_ss_welcome_chat', ''),
+            'welcomeIntroChatbotId'       => get_option('mfsd_stevegpt_map_ss_welcome_intro', ''),
+            'welcomeChatChatbotId'        => get_option('mfsd_stevegpt_map_ss_welcome_chat', ''),
+            'studentSummaryChatbotId'     => get_option('mfsd_stevegpt_map_ss_student_summary_chat', ''),
+            'parentSummaryChatbotId'      => get_option('mfsd_stevegpt_map_ss_parent_summary_chat', ''),
         ]);
 
         return '<div id="mfsd-ss-root"></div>';

@@ -2734,6 +2734,7 @@
     stopPoll(); stopHeartbeat();
 
     api('memory/state').then(data => {
+      if (data.game_id) state.gameId = data.game_id;
       const allPlayers = data.all_players || state.allPlayers || [];
       const winnerId   = winnerPlayerId || data.winner_player_id || null;
       const winnerRow  = allPlayers.find(p => p.id === winnerId);
@@ -2776,9 +2777,385 @@
 
   function renderPostGamePlaceholder() {
     const wrap = el('div', '');
-    wrap.style.cssText = 'padding:16px 20px 32px;text-align:center;color:var(--ss-muted);font-size:14px;';
-    wrap.textContent = 'Your strength summary and badges are coming soon!';
+    wrap.style.cssText = 'padding:16px 20px 32px;text-align:center;';
+    const btn = el('button', 'ss-btn ss-btn-gold', '⭐ View Your Strengths Summary →');
+    btn.style.cssText = 'display:block;width:100%;max-width:320px;margin:0 auto;';
+    btn.onclick = renderSummary;
+    wrap.appendChild(btn);
+    const note = el('p', '');
+    note.style.cssText = 'color:var(--ss-text-dim);font-size:12px;margin-top:12px;';
+    note.textContent = "See Steve's analysis and earn your badge!";
+    wrap.appendChild(note);
     return wrap;
+  }
+
+  // =========================================================================
+  // MEMORY GAME — SUMMARY SCREEN (MYF-170)
+  // =========================================================================
+  async function renderSummary() {
+    const body = el('div', 'ss-screen-body');
+    const loadDiv = el('div', '');
+    loadDiv.style.cssText = 'padding:60px 20px;text-align:center;';
+    loadDiv.innerHTML = '<div class="ss-waiting"><div class="ss-dots"><span></span><span></span><span></span></div>'
+      + '<div style="margin-top:14px;color:var(--ss-text-dim);font-size:14px;">Generating your strengths summary…</div></div>';
+    body.appendChild(loadDiv);
+    render(body);
+
+    try {
+      const summaryData = await api('memory/summary?game_id=' + state.gameId, 'GET');
+      const isStudent   = summaryData.player_role === 'student';
+
+      let badgeInfo = null;
+      if (isStudent) {
+        try { badgeInfo = await api('memory/award-badge', 'POST', { game_id: state.gameId }); }
+        catch (_) {}
+      }
+
+      renderSummaryUI(summaryData, badgeInfo);
+    } catch (e) {
+      const b = el('div', 'ss-screen-body');
+      b.innerHTML = '<div style="padding:40px;text-align:center;">'
+        + '<div style="color:var(--ss-red);margin-bottom:16px;">Could not load summary. Please try again.</div>'
+        + '<button class="ss-btn ss-btn-gold" onclick="location.reload()">Reload</button></div>';
+      render(b);
+    }
+  }
+
+  function renderSummaryUI(data, badgeInfo) {
+    const isStudent = data.player_role === 'student';
+    const body      = el('div', 'ss-screen-body');
+
+    const header = el('div', 'ss-game-header');
+    header.innerHTML = '<div class="ss-game-title">⭐ Strengths Summary</div>'
+      + '<div class="ss-game-sub">' + escHtml(data.student_name) + ' &amp; Family</div>';
+    body.appendChild(header);
+
+    const inner = el('div', '');
+    inner.style.paddingBottom = '32px';
+
+    if (isStudent) {
+      renderStudentSummaryContent(inner, data, badgeInfo);
+    } else {
+      renderParentSummaryContent(inner, data);
+    }
+
+    body.appendChild(inner);
+    render(body);
+
+    // Init chat after render — parents need to click Tab 2, students get it immediately
+    if (isStudent) initSummaryChatWidget();
+  }
+
+  function renderStudentSummaryContent(container, data, badgeInfo) {
+    // Self-strengths
+    const selfCard = el('div', 'ss-card');
+    selfCard.style.margin = '16px';
+    selfCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:10px;">Your 5 Super Strengths</div>';
+    const chips = el('div', 'ss-strength-chips');
+    (data.self_strengths || []).forEach(s => chips.appendChild(el('span', 'ss-strength-chip', s)));
+    selfCard.appendChild(chips);
+    container.appendChild(selfCard);
+
+    // Family wrote about me
+    if ((data.family_wrote_about_me || []).length) {
+      const famCard = el('div', 'ss-card');
+      famCard.style.margin = '0 16px 16px';
+      famCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:10px;">How Your Family Sees You</div>';
+      const list = el('div', 'ss-family-card-list');
+      data.family_wrote_about_me.forEach(c => {
+        const row = el('div', 'ss-family-card-row');
+        row.innerHTML = '<span>' + escHtml(c.strength_text) + '</span>'
+          + '<span class="ss-family-card-author">— ' + escHtml(c.author_display) + '</span>';
+        list.appendChild(row);
+      });
+      famCard.appendChild(list);
+      container.appendChild(famCard);
+    }
+
+    // AI sections
+    const sections = data.sections || {};
+    if (Object.keys(sections).length) {
+      const aiCard = el('div', 'ss-card');
+      aiCard.style.margin = '0 16px 16px';
+      aiCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;">💡 Steve\'s Analysis</div>';
+      aiCard.appendChild(renderAISectionTabs(sections));
+      container.appendChild(aiCard);
+    }
+
+    // Badge award
+    if (badgeInfo && (badgeInfo.completion_earned || badgeInfo.winner_badge_slug)) {
+      const badgeWrap = el('div', 'ss-card');
+      badgeWrap.style.margin = '0 16px 16px';
+      container.appendChild(badgeWrap);
+      setTimeout(() => {
+        badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Badge' + (badgeInfo.winner_badge_slug ? 's' : '') + ' Earned!</div>';
+        if (badgeInfo.completion_earned) {
+          renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
+        }
+        if (badgeInfo.winner_badge_slug) {
+          renderBadgeAward(badgeWrap, badgeInfo.winner_badge_url, 'Winner', 15);
+        }
+      }, 600);
+    }
+
+    // Chat widget placeholder
+    const chatEl = el('div', '');
+    chatEl.id = 'ss-chat-placeholder';
+    chatEl.style.padding = '0 16px 16px';
+    container.appendChild(chatEl);
+  }
+
+  function renderParentSummaryContent(container, data) {
+    // Main tabs
+    const tabBar = el('div', 'ss-summary-tabs');
+    const tab1   = el('button', 'ss-summary-tab-btn active', '📚 Student View');
+    const tab2   = el('button', 'ss-summary-tab-btn', '👁️ Your Analysis');
+    tabBar.appendChild(tab1);
+    tabBar.appendChild(tab2);
+    container.appendChild(tabBar);
+
+    const pane1 = el('div', 'ss-summary-tab-content active');
+    const pane2 = el('div', 'ss-summary-tab-content');
+
+    // ── Pane 1: Student summary (read-only) ─────────────────────────────────
+
+    const ssCard = el('div', 'ss-card');
+    ssCard.style.margin = '16px';
+    ssCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:10px;">'
+      + escHtml(data.student_name) + "'s Chosen Strengths</div>";
+    const ssChips = el('div', 'ss-strength-chips');
+    (data.student_self_strengths || []).forEach(s => ssChips.appendChild(el('span', 'ss-strength-chip', s)));
+    ssCard.appendChild(ssChips);
+    pane1.appendChild(ssCard);
+
+    if ((data.family_wrote_about_student || []).length) {
+      const fCard = el('div', 'ss-card');
+      fCard.style.margin = '0 16px 16px';
+      fCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:10px;">Family wrote…</div>';
+      const list = el('div', 'ss-family-card-list');
+      data.family_wrote_about_student.forEach(c => {
+        const row = el('div', 'ss-family-card-row');
+        row.innerHTML = '<span>' + escHtml(c.strength_text) + '</span>'
+          + '<span class="ss-family-card-author">— ' + escHtml(c.author_display) + '</span>';
+        list.appendChild(row);
+      });
+      fCard.appendChild(list);
+      pane1.appendChild(fCard);
+    }
+
+    if (data.student_ai_summary) {
+      const aiCard = el('div', 'ss-card');
+      aiCard.style.margin = '0 16px 16px';
+      aiCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:8px;">💡 '
+        + escHtml(data.student_name) + "'s Insight</div>";
+      const p = el('p', '');
+      p.style.cssText = 'font-size:14px;line-height:1.75;color:var(--ss-text);white-space:pre-wrap;margin:0;';
+      p.textContent = data.student_ai_summary;
+      aiCard.appendChild(p);
+      pane1.appendChild(aiCard);
+    } else {
+      const note = el('p', '');
+      note.style.cssText = 'padding:0 16px 16px;color:var(--ss-text-dim);font-size:13px;';
+      note.textContent = data.student_name + "'s personal analysis will appear here once they've viewed their summary.";
+      pane1.appendChild(note);
+    }
+
+    // ── Pane 2: Parent view ──────────────────────────────────────────────────
+
+    if ((data.parent_self_strengths || []).length) {
+      const psCard = el('div', 'ss-card');
+      psCard.style.margin = '16px';
+      psCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:10px;">Your Chosen Strengths</div>';
+      const psChips = el('div', 'ss-strength-chips');
+      data.parent_self_strengths.forEach(s => psChips.appendChild(el('span', 'ss-strength-chip', s)));
+      psCard.appendChild(psChips);
+      pane2.appendChild(psCard);
+    }
+
+    if ((data.student_wrote_about_parent || []).length) {
+      const swCard = el('div', 'ss-card');
+      swCard.style.margin = '0 16px 16px';
+      swCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:10px;">'
+        + escHtml(data.student_name) + ' wrote about you…</div>';
+      const list = el('div', 'ss-family-card-list');
+      data.student_wrote_about_parent.forEach(c => {
+        const row = el('div', 'ss-family-card-row');
+        row.innerHTML = '<span>' + escHtml(c.strength_text) + '</span>';
+        list.appendChild(row);
+      });
+      swCard.appendChild(list);
+      pane2.appendChild(swCard);
+    }
+
+    const sections = data.sections || {};
+    if (Object.keys(sections).length) {
+      const aiCard2 = el('div', 'ss-card');
+      aiCard2.style.margin = '0 16px 16px';
+      aiCard2.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;">💡 Steve\'s Analysis</div>';
+      aiCard2.appendChild(renderAISectionTabs(sections));
+      pane2.appendChild(aiCard2);
+    }
+
+    const chatEl2 = el('div', '');
+    chatEl2.id = 'ss-chat-placeholder';
+    chatEl2.style.padding = '0 16px 16px';
+    pane2.appendChild(chatEl2);
+
+    container.appendChild(pane1);
+    container.appendChild(pane2);
+
+    tab1.onclick = () => {
+      tab1.classList.add('active'); tab2.classList.remove('active');
+      pane1.classList.add('active'); pane2.classList.remove('active');
+    };
+    tab2.onclick = () => {
+      tab2.classList.add('active'); tab1.classList.remove('active');
+      pane2.classList.add('active'); pane1.classList.remove('active');
+      const ph = document.getElementById('ss-chat-placeholder');
+      if (ph && !ph.dataset.initialized) initSummaryChatWidget();
+    };
+  }
+
+  function renderAISectionTabs(sections) {
+    const wrap  = el('div', '');
+    const keys  = Object.keys(sections);
+    if (!keys.length) return wrap;
+
+    const tabRow = el('div', 'ss-ai-section-tabs');
+    const panes  = [];
+
+    keys.forEach((key, i) => {
+      const s   = sections[key];
+      const btn = el('button', 'ss-ai-section-btn' + (i === 0 ? ' active' : ''), s.label);
+      const pane = el('div', 'ss-ai-section-content' + (i === 0 ? ' active' : ''));
+      pane.textContent = s.content;
+      panes.push(pane);
+
+      btn.onclick = () => {
+        tabRow.querySelectorAll('.ss-ai-section-btn').forEach(b => b.classList.remove('active'));
+        panes.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        pane.classList.add('active');
+      };
+      tabRow.appendChild(btn);
+    });
+
+    wrap.appendChild(tabRow);
+    panes.forEach(p => wrap.appendChild(p));
+    return wrap;
+  }
+
+  function renderBadgeAward(container, imageUrl, type, coins) {
+    const div = el('div', 'ss-badge-award-item');
+    if (imageUrl) {
+      const img = document.createElement('img');
+      img.className = 'ss-badge-award-img';
+      img.src       = imageUrl;
+      img.alt       = type + ' badge';
+      img.onerror   = () => { img.replaceWith(el('div', 'ss-badge-award-fallback', type === 'Winner' ? '🏆' : '⭐')); };
+      div.appendChild(img);
+    } else {
+      div.appendChild(el('div', 'ss-badge-award-fallback', type === 'Winner' ? '🏆' : '⭐'));
+    }
+    div.appendChild(el('div', 'ss-badge-award-name', 'Super Strengths ' + type + ' Badge'));
+    div.appendChild(el('div', 'ss-badge-award-coins', '+' + coins + ' coins'));
+    container.appendChild(div);
+  }
+
+  async function initSummaryChatWidget() {
+    const placeholder = document.getElementById('ss-chat-placeholder');
+    if (!placeholder || placeholder.dataset.initialized) return;
+    placeholder.dataset.initialized = 'true';
+
+    try {
+      const config = await api('memory/chat-widget?game_id=' + state.gameId, 'GET');
+      if (!config.ok || !config.chatbot_id) return;
+
+      const widget = el('div', 'ss-chat-widget');
+
+      const chatHeader = el('div', 'ss-chat-header');
+      chatHeader.innerHTML = '<span class="ss-chat-avatar-text">' + escHtml(config.avatar || '💬') + '</span>'
+        + '<span class="ss-chat-name">' + escHtml(config.ai_name || 'Steve') + '</span>';
+      widget.appendChild(chatHeader);
+
+      const msgs = el('div', 'ss-chat-messages');
+      const greeting = el('div', 'ss-chat-msg ai');
+      greeting.textContent = config.greeting || 'Ask me about your Super Strengths!';
+      msgs.appendChild(greeting);
+      widget.appendChild(msgs);
+
+      const inputRow = el('div', 'ss-chat-input-row');
+      const input    = el('textarea', 'ss-chat-input');
+      input.placeholder = 'Ask me anything…';
+      input.rows = 1;
+      const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
+
+      const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
+      const nonce   = (window.stevegpt || {}).nonce || '';
+
+      async function sendMessage() {
+        const msg = input.value.trim();
+        if (!msg || sendBtn.disabled) return;
+        input.value = '';
+        input.style.height = 'auto';
+        sendBtn.disabled = true;
+
+        const userMsg = el('div', 'ss-chat-msg user');
+        userMsg.textContent = msg;
+        msgs.appendChild(userMsg);
+
+        const typing = html('div', 'ss-chat-msg ai typing-dots',
+          '<div class="ss-dots"><span></span><span></span><span></span></div>');
+        msgs.appendChild(typing);
+        msgs.scrollTop = msgs.scrollHeight;
+
+        try {
+          const res  = await fetch(ajaxUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            credentials: 'same-origin',
+            body: new URLSearchParams({
+              action:          'stevegpt_send_message',
+              nonce,
+              chatbot_id:      config.chatbot_id,
+              conversation_id: config.conversation_id || '',
+              message:         msg,
+              context:         config.context || '',
+            }),
+          });
+          const json = await res.json();
+          typing.remove();
+          const aiMsg = el('div', 'ss-chat-msg ai');
+          aiMsg.textContent = json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.';
+          msgs.appendChild(aiMsg);
+        } catch (_) {
+          typing.remove();
+          const errMsg = el('div', 'ss-chat-msg ai');
+          errMsg.textContent = 'Connection error. Please try again.';
+          msgs.appendChild(errMsg);
+        }
+
+        sendBtn.disabled = false;
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+
+      sendBtn.onclick = sendMessage;
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      });
+      input.addEventListener('input', () => {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+      });
+
+      inputRow.appendChild(input);
+      inputRow.appendChild(sendBtn);
+      widget.appendChild(inputRow);
+
+      placeholder.appendChild(widget);
+    } catch (_) {
+      // Chat unavailable — non-fatal, no UI needed
+    }
   }
 
   // =========================================================================

@@ -86,6 +86,22 @@ class MFSD_SS_Badges {
     }
 
     // =========================================================================
+    // LOOKUP — returns the badge slug if student already holds this badge type
+    // =========================================================================
+
+    public static function get_awarded_badge(int $student_id, string $type): string|false {
+        global $wpdb;
+        $table  = $wpdb->prefix . 'mfsd_badges';
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table'") !== $table) return false;
+        $prefix = 'badge_ss_' . $type . '_';
+        return $wpdb->get_var($wpdb->prepare(
+            "SELECT badge_slug FROM {$table} WHERE student_id = %d AND badge_slug LIKE %s ORDER BY earned_at DESC LIMIT 1",
+            $student_id,
+            $wpdb->esc_like($prefix) . '%'
+        )) ?: false;
+    }
+
+    // =========================================================================
     // GAME-END DISPATCH — called from flip_card() once the game is marked
     // complete. Handles all_match ties: all students with the max score win.
     // =========================================================================
