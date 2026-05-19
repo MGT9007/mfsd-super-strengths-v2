@@ -1763,6 +1763,10 @@ class MFSD_SS_API {
             return self::err('no_strengths', 'No self-strengths provided');
         }
 
+        if (!MFSD_SS_Demo::check_prerequisites($uid)) {
+            return self::err('prerequisites_not_met', 'Complete Lens, Word Association, and Personality Test before starting Demo Mode.', 403);
+        }
+
         $self_strengths = array_values(array_unique(array_map('sanitize_text_field', $self_strengths)));
 
         // If active demo game exists, resume it

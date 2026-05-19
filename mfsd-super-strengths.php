@@ -37,7 +37,7 @@ final class MFSD_Super_Strengths {
         add_action('admin_menu',    [$this, 'admin_menu']);
 
         add_filter('stevegpt_plugin_integration_slots', [$this, 'register_stevegpt_slots']);
-        add_action('mfsd_ss_turn_timeout_check', ['MFSD_SS_Game', 'run_timeout_check']);
+        add_action('mfsd_ss_turn_timeout_check', ['MFSD_SS_Memory', 'run_turn_timeout_check']);
         if (!wp_next_scheduled('mfsd_ss_turn_timeout_check')) {
             wp_schedule_event(time(), 'hourly', 'mfsd_ss_turn_timeout_check');
         }

@@ -65,7 +65,7 @@ class MFSD_SS_Demo {
             $student_user_id
         ), ARRAY_A);
 
-        if (empty($rows)) return ['available' => false];
+        if (count($rows) < 3) return ['available' => false];
 
         $lines = [];
         foreach ($rows as $r) {

@@ -335,17 +335,27 @@ class MFSD_SS_Memory {
             $game_id
         ), ARRAY_A);
 
+        // Cap at CARDS_PER_TARGET cards per target to keep board size predictable
+        // (n players → n × CARDS_PER_TARGET pairs regardless of how many writers each target has)
+        $by_target = [];
         foreach ($family_cards as $card) {
-            $tiles[] = [
-                'card_type'        => 'family_card',
-                'card_id'          => (int) $card['id'],
-                'self_strength_id' => null,
-                'author_player_id' => (int) $card['author_player_id'],
-                'target_player_id' => (int) $card['target_player_id'],
-                'strength_text'    => $card['strength_text'],
-                'author_display'   => $card['author_display'],
-                'target_display'   => $card['target_display'],
-            ];
+            $by_target[(int) $card['target_player_id']][] = $card;
+        }
+        foreach ($by_target as $tcards) {
+            shuffle($tcards);
+            $tcards = array_slice($tcards, 0, MFSD_SS_DB::CARDS_PER_TARGET);
+            foreach ($tcards as $card) {
+                $tiles[] = [
+                    'card_type'        => 'family_card',
+                    'card_id'          => (int) $card['id'],
+                    'self_strength_id' => null,
+                    'author_player_id' => (int) $card['author_player_id'],
+                    'target_player_id' => (int) $card['target_player_id'],
+                    'strength_text'    => $card['strength_text'],
+                    'author_display'   => $card['author_display'],
+                    'target_display'   => $card['target_display'],
+                ];
+            }
         }
 
         if ($card_pool === 'all_cards') {

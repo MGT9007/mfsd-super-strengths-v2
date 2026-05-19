@@ -1335,6 +1335,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
 
 @media (max-width: 480px) {
   .ss-board-grid-6 { grid-template-columns: repeat(4, 1fr); }
+  .ss-card-tile { min-height: 70px; }
 }
 
 /* ── Card tiles ─────────────────────────────────────────────────────────────── */
@@ -1391,7 +1392,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   border-color: var(--ss-gold);
   background: rgba(201,162,39,0.12);
 }
-.ss-wrap.ss-theme-student .ss-card-tile.matched .ss-card-tile-front {
+body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   box-shadow: 0 0 12px rgba(201,162,39,0.4);
 }
 .ss-card-tile.flip-anim {
