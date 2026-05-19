@@ -35,9 +35,6 @@ if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
     update_option('mfsd_ss_free_text_max',     max(1, min(5, (int)($_POST['ft_max'] ?? 2))));
     update_option('mfsd_ss_free_text_min_len', max(2, (int)($_POST['ft_min_len'] ?? 3)));
     update_option('mfsd_ss_free_text_max_len', min(80, (int)($_POST['ft_max_len'] ?? 40)));
-    update_option('mfsd_ss_snap_mode',         sanitize_text_field($_POST['snap_mode'] ?? 'quick_draw'));
-    update_option('mfsd_ss_snap_quick_draw_target', max(1, (int)($_POST['snap_quick_draw_target'] ?? 5)));
-    update_option('mfsd_ss_snap_timer',        max(1, min(10, (int)($_POST['snap_timer'] ?? 3))));
     // Memory game settings
     update_option('mfsd_ss_card_pool',             sanitize_text_field($_POST['card_pool'] ?? 'family_cards'));
     update_option('mfsd_ss_memory_mode',           sanitize_text_field($_POST['memory_mode'] ?? 'first_to_x'));
@@ -361,13 +358,7 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
         .ss-dealing-preview td, .ss-dealing-preview th { padding: 4px 8px; }
         .delete-link { color: #a00; }
         .delete-link:hover { color: #dc3232; }
-        .ss-deprecated-notice {
-            display: inline-block; background: #fffbe6; border: 1px solid #e0c36d;
-            padding: 3px 9px; border-radius: 3px; font-size: 11px; font-weight: 700;
-            color: #7a6020; text-transform: uppercase; vertical-align: middle; margin-left: 8px;
-        }
-        .ss-deprecated-section { opacity: 0.65; }
-        .ss-deprecated-section th, .ss-deprecated-section td { color: #888; }
+
     </style>
 
     <!-- TABS -->
@@ -409,37 +400,7 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                             <strong>Extended</strong> — Phase A (guess target) + Phase B (guess author)</label><br><br>
                         <label><input type="radio" name="game_mode" value="short" <?php checked(get_option('mfsd_ss_mode','full'),'short'); ?>>
                             <strong>Family Short</strong> — Phase A only (guess target)</label><br><br>
-                        <label><input type="radio" name="game_mode" value="snap" <?php checked(get_option('mfsd_ss_mode','full'),'snap'); ?>>
-                            <strong>Snap</strong> — Real-time Super Strengths Snap card game (2–6 players, all must be online)
-                            <span class="ss-deprecated-notice">Deprecated</span></label>
-                        <p class="description">Extended is recommended for families. Snap requires all players to be online simultaneously.
-                            <br><em style="color:#92400e;">⚠️ Snap mode has been replaced by the Memory game in v5. These settings are preserved for existing games only.</em></p>
-                    </td>
-                </tr>
-
-                <tr id="ss-snap-settings-row" class="ss-deprecated-section" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
-                    <th scope="row" style="padding-left:30px;">↳ Snap sub-mode <span class="ss-deprecated-notice">Deprecated</span></th>
-                    <td>
-                        <label><input type="radio" name="snap_mode" value="quick_draw" <?php checked(get_option('mfsd_ss_snap_mode','quick_draw'),'quick_draw'); ?>>
-                            <strong>Quick Draw</strong> — Fixed number of snaps; player with most wins at the end wins</label><br><br>
-                        <label><input type="radio" name="snap_mode" value="until_death" <?php checked(get_option('mfsd_ss_snap_mode','quick_draw'),'until_death'); ?>>
-                            <strong>Until the Death</strong> — Play until all cards have been snapped; player with most snaps wins</label>
-                    </td>
-                </tr>
-
-                <tr id="ss-snap-qd-row" class="ss-deprecated-section" style="<?php echo (get_option('mfsd_ss_mode') === 'snap' && get_option('mfsd_ss_snap_mode') === 'quick_draw') ? '' : 'display:none'; ?>">
-                    <th scope="row" style="padding-left:30px;">↳ Quick Draw target snaps</th>
-                    <td>
-                        <input type="number" name="snap_quick_draw_target" value="<?php echo (int) get_option('mfsd_ss_snap_quick_draw_target', 5); ?>" min="1" max="30" class="small-text">
-                        <p class="description">Number of snaps before the game ends. Default: 5. Max possible snaps = (n−1)×5 pairs.</p>
-                    </td>
-                </tr>
-
-                <tr id="ss-snap-timer-row" class="ss-deprecated-section" style="<?php echo get_option('mfsd_ss_mode') === 'snap' ? '' : 'display:none'; ?>">
-                    <th scope="row" style="padding-left:30px;">↳ Snap timer (seconds)</th>
-                    <td>
-                        <input type="number" name="snap_timer" value="<?php echo (int) get_option('mfsd_ss_snap_timer', 3); ?>" min="1" max="10" class="small-text">
-                        <p class="description">How long the snap bullseye is visible after a match. Default: 3 seconds. Tiebreaker always uses 5 seconds.</p>
+                        <p class="description">Extended is recommended for families.</p>
                     </td>
                 </tr>
 
@@ -989,23 +950,6 @@ document.querySelectorAll('.ss-tab-btn').forEach(btn => {
         btn.classList.add('active');
     });
 });
-
-// Show/hide snap settings based on game mode selection
-function updateSnapRows() {
-    const mode = document.querySelector('input[name="game_mode"]:checked')?.value;
-    const snapRows = ['ss-snap-settings-row','ss-snap-timer-row'];
-    snapRows.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = (mode === 'snap') ? '' : 'none';
-    });
-    const qdRow = document.getElementById('ss-snap-qd-row');
-    if (qdRow) {
-        const subMode = document.querySelector('input[name="snap_mode"]:checked')?.value;
-        qdRow.style.display = (mode === 'snap' && subMode === 'quick_draw') ? '' : 'none';
-    }
-}
-document.querySelectorAll('input[name="game_mode"]').forEach(r => r.addEventListener('change', updateSnapRows));
-document.querySelectorAll('input[name="snap_mode"]').forEach(r => r.addEventListener('change', updateSnapRows));
 
 // Show/hide memory mode dependent rows
 function updateMemoryModeRows() {
