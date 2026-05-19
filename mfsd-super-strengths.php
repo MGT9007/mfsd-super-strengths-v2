@@ -19,6 +19,7 @@ require_once MFSD_SS_PATH . 'includes/class-ss-memory.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-api.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-summary.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-badges.php';
+require_once MFSD_SS_PATH . 'includes/class-ss-demo.php';
 
 final class MFSD_Super_Strengths {
 
@@ -122,6 +123,7 @@ final class MFSD_Super_Strengths {
             'welcomeChatChatbotId'        => get_option('mfsd_stevegpt_map_ss_welcome_chat', ''),
             'studentSummaryChatbotId'     => get_option('mfsd_stevegpt_map_ss_student_summary_chat', ''),
             'parentSummaryChatbotId'      => get_option('mfsd_stevegpt_map_ss_parent_summary_chat', ''),
+            'demoChatbotId'               => get_option('mfsd_stevegpt_map_ss_demo_chat', ''),
         ]);
 
         return '<div id="mfsd-ss-root"></div>';
@@ -162,6 +164,24 @@ final class MFSD_Super_Strengths {
             'plugin' => 'Super Strengths',
             'role'   => 'Parent summary chat',
             'option' => 'mfsd_stevegpt_map_ss_parent_summary_chat',
+            'tokens' => [],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Demo picker',
+            'option' => 'mfsd_stevegpt_map_ss_demo_picker',
+            'tokens' => ['student_name', 'student_age', 'student_self_strengths', 'strengths_library', 'lens_agreements', 'lens_differences_count', 'lens_differences', 'lens_summary', 'word_assoc_top', 'personality_type', 'personality_label'],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Demo summary',
+            'option' => 'mfsd_stevegpt_map_ss_demo_summary',
+            'tokens' => ['student_name', 'student_age', 'student_self_strengths', 'pick_1_text', 'pick_1_source', 'pick_1_rationale', 'pick_2_text', 'pick_2_source', 'pick_2_rationale', 'pick_3_text', 'pick_3_source', 'pick_3_rationale', 'pick_4_text', 'pick_4_source', 'pick_4_rationale', 'pick_5_text', 'pick_5_source', 'pick_5_rationale', 'shared_strengths', 'hidden_strengths', 'pairs_matched', 'total_pairs'],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Demo chat',
+            'option' => 'mfsd_stevegpt_map_ss_demo_chat',
             'tokens' => [],
         ];
         return $slots;
