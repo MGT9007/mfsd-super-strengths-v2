@@ -226,61 +226,74 @@
       const inner = el('div', '');
       inner.style.padding = '28px 24px';
 
-      inner.innerHTML = `
-        <div style="text-align:center;margin-bottom:24px;">
-          <div style="font-size:52px;margin-bottom:12px;">🃏</div>
-          <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Super Strengths Cards</h2>
-          <p style="color:var(--ss-text-dim);font-size:14px;margin:0;">A family card game about your strengths</p>
-        </div>
-        <div class="ss-section-label" style="margin-bottom:10px;">Your family players</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
-          ${data.linked_parents.map(p =>
-            `<div class="ss-player-pill">
-              <span style="font-size:16px;">${roleEmoji(p.role)}</span>
-              ${escHtml(p.display_name)}
-              <span style="color:var(--ss-text-dim);font-size:11px;">— ${escHtml(p.role)}</span>
-            </div>`
-          ).join('')}
-        </div>
-        <div style="background:rgba(109,63,192,0.1);border:1px solid rgba(109,63,192,0.25);border-radius:8px;padding:14px;margin-bottom:20px;font-size:13px;line-height:1.6;color:var(--ss-text);">
-          When you start the game, your family will be able to log in and write Super Strength cards too. The game begins once everyone has submitted their cards.
-        </div>
-      `;
-
-      const startBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '🚀 Start Game');
-      startBtn.onclick = async () => {
-        startBtn.disabled = true;
-        startBtn.textContent = 'Starting…';
-        const lv = loading('Setting up your game…');
-        try {
-          const result = await api('memory/start', 'POST');
-          unload(lv);
-          if (result.ok && result.status !== 'no_game') {
-            state.gameId     = result.game_id;
-            state.gameKey    = result.game_key;
-            state.gameType   = result.game_type;
-            state.gameStatus = result.status;
-            state.memoryMode = result.memory_mode;
-            state.player     = result.player;
-            state.allPlayers = result.all_players || [];
-            await loadStrengths();
-            routeToScreen();
-          } else {
-            renderError(result.message || 'Could not start game. Please try again.');
-          }
-        } catch (e) {
-          unload(lv);
-          startBtn.disabled = false;
-          startBtn.textContent = '🚀 Start Game';
-          renderError(e.message);
-        }
-      };
-      inner.appendChild(startBtn);
       if (cfg.demoModeEnabled) {
+        // Demo mode ON — suppress family game option entirely (spec §16.3)
+        inner.innerHTML = `
+          <div style="text-align:center;margin-bottom:24px;">
+            <div style="font-size:52px;margin-bottom:12px;">🤖</div>
+            <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Super Strengths Cards</h2>
+            <p style="color:var(--ss-text-dim);font-size:14px;margin:0;">Discover your strengths with Steve</p>
+          </div>
+          <div class="ss-card" style="margin-bottom:16px;">${renderStaticIntroRules()}</div>
+          <div style="background:rgba(109,63,192,0.1);border:1px solid rgba(109,63,192,0.25);border-radius:8px;padding:14px;margin-bottom:20px;font-size:13px;line-height:1.6;color:var(--ss-text);">
+            Try the demo — Steve will select strength cards for you based on your previous activities. No family members needed to get started.
+          </div>
+        `;
         const demoBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full', '🤖 Try Demo with Steve');
-        demoBtn.style.marginTop = '10px';
         demoBtn.onclick = handleDemoStart;
         inner.appendChild(demoBtn);
+      } else {
+        // Family game entry
+        inner.innerHTML = `
+          <div style="text-align:center;margin-bottom:24px;">
+            <div style="font-size:52px;margin-bottom:12px;">🃏</div>
+            <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Super Strengths Cards</h2>
+            <p style="color:var(--ss-text-dim);font-size:14px;margin:0;">A family card game about your strengths</p>
+          </div>
+          <div class="ss-card" style="margin-bottom:16px;">${renderStaticIntroRules()}</div>
+          <div class="ss-section-label" style="margin-bottom:10px;">Your family players</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+            ${data.linked_parents.map(p =>
+              `<div class="ss-player-pill">
+                <span style="font-size:16px;">${roleEmoji(p.role)}</span>
+                ${escHtml(p.display_name)}
+                <span style="color:var(--ss-text-dim);font-size:11px;">— ${escHtml(p.role)}</span>
+              </div>`
+            ).join('')}
+          </div>
+          <div style="background:rgba(109,63,192,0.1);border:1px solid rgba(109,63,192,0.25);border-radius:8px;padding:14px;margin-bottom:20px;font-size:13px;line-height:1.6;color:var(--ss-text);">
+            When you start the game, your family will be able to log in and write Super Strength cards too. The game begins once everyone has submitted their cards.
+          </div>
+        `;
+        const startBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '🚀 Start Game');
+        startBtn.onclick = async () => {
+          startBtn.disabled = true;
+          startBtn.textContent = 'Starting…';
+          const lv = loading('Setting up your game…');
+          try {
+            const result = await api('memory/start', 'POST');
+            unload(lv);
+            if (result.ok && result.status !== 'no_game') {
+              state.gameId     = result.game_id;
+              state.gameKey    = result.game_key;
+              state.gameType   = result.game_type;
+              state.gameStatus = result.status;
+              state.memoryMode = result.memory_mode;
+              state.player     = result.player;
+              state.allPlayers = result.all_players || [];
+              await loadStrengths();
+              routeToScreen();
+            } else {
+              renderError(result.message || 'Could not start game. Please try again.');
+            }
+          } catch (e) {
+            unload(lv);
+            startBtn.disabled = false;
+            startBtn.textContent = '🚀 Start Game';
+            renderError(e.message);
+          }
+        };
+        inner.appendChild(startBtn);
       }
       body.appendChild(inner);
 
@@ -425,8 +438,19 @@
     startBtn.onclick = renderSelfWrite;
     inner.appendChild(startBtn);
 
+    if (cfg.welcomeChatChatbotId) {
+      const chatPlaceholder = el('div', '');
+      chatPlaceholder.id = 'ss-welcome-chat-placeholder';
+      chatPlaceholder.style.marginTop = '16px';
+      inner.appendChild(chatPlaceholder);
+    }
+
     body.appendChild(inner);
     render(body);
+
+    if (cfg.welcomeChatChatbotId) {
+      initWelcomeChatWidget(document.getElementById('ss-welcome-chat-placeholder'));
+    }
   }
 
   function renderStaticIntroRules() {
@@ -438,6 +462,100 @@
       'The player with the most matched pairs wins.',
     ];
     return rules.map((r, i) => `<div class="ss-intro-rule"><div class="ss-intro-rule-num">${i+1}</div><span>${r}</span></div>`).join('');
+  }
+
+  function initWelcomeChatWidget(placeholder) {
+    if (!placeholder || !cfg.welcomeChatChatbotId) return;
+
+    const widget = el('div', 'ss-chat-widget');
+
+    const chatHeader = el('div', 'ss-chat-header');
+    chatHeader.innerHTML = '<span class="ss-chat-avatar-text">🤖</span><span class="ss-chat-name">Steve</span>';
+    widget.appendChild(chatHeader);
+
+    const msgs = el('div', 'ss-chat-messages');
+    const greeting = el('div', 'ss-chat-msg ai');
+    greeting.textContent = 'Hi! Ask me anything about the game — I\'m here to help before you get started.';
+    msgs.appendChild(greeting);
+
+    const chips = [
+      'What if my family haven\'t written cards yet?',
+      'How long does it take?',
+      'What happens at the end?',
+    ];
+    const chipsDiv = el('div', 'ss-chat-chips');
+    chips.forEach(chip => {
+      const btn = el('button', 'ss-chat-chip', chip);
+      btn.onclick = () => { chipsDiv.remove(); sendWelcomeMsg(chip); };
+      chipsDiv.appendChild(btn);
+    });
+    msgs.appendChild(chipsDiv);
+    widget.appendChild(msgs);
+
+    const inputRow = el('div', 'ss-chat-input-row');
+    const input    = el('textarea', 'ss-chat-input');
+    input.placeholder = 'Ask me anything…';
+    input.rows = 1;
+    const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
+
+    const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
+    const nonce   = (window.stevegpt || {}).nonce   || '';
+
+    async function sendWelcomeMsg(msg) {
+      if (!msg || sendBtn.disabled) return;
+      input.value = '';
+      input.style.height = 'auto';
+      sendBtn.disabled = true;
+
+      const userMsg = el('div', 'ss-chat-msg user');
+      userMsg.textContent = msg;
+      msgs.appendChild(userMsg);
+
+      const typing = html('div', 'ss-chat-msg ai typing-dots',
+        '<div class="ss-dots"><span></span><span></span><span></span></div>');
+      msgs.appendChild(typing);
+      msgs.scrollTop = msgs.scrollHeight;
+
+      try {
+        const res  = await fetch(ajaxUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          credentials: 'same-origin',
+          body: new URLSearchParams({
+            action:     'stevegpt_send_message',
+            nonce,
+            chatbot_id: cfg.welcomeChatChatbotId,
+            message:    msg,
+          }),
+        });
+        const json = await res.json();
+        typing.remove();
+        const aiMsg = el('div', 'ss-chat-msg ai');
+        aiMsg.textContent = json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.';
+        msgs.appendChild(aiMsg);
+      } catch (_) {
+        typing.remove();
+        const errMsg = el('div', 'ss-chat-msg ai');
+        errMsg.textContent = 'Connection error. Please try again.';
+        msgs.appendChild(errMsg);
+      }
+      sendBtn.disabled = false;
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    sendBtn.onclick = () => sendWelcomeMsg(input.value.trim());
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendWelcomeMsg(input.value.trim()); }
+    });
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+    });
+
+    inputRow.appendChild(input);
+    inputRow.appendChild(sendBtn);
+    widget.appendChild(inputRow);
+    placeholder.appendChild(widget);
   }
 
   // =========================================================================

@@ -1747,6 +1747,15 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   transition: opacity 0.15s;
 }
 .ss-chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ss-chat-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 4px;
+}
+.ss-chat-chip {
+  background: rgba(201,162,39,0.12); border: 1px solid rgba(201,162,39,0.3);
+  color: var(--ss-gold-lt); border-radius: 16px; padding: 5px 12px;
+  font-size: 12px; cursor: pointer; transition: background 0.15s;
+}
+.ss-chat-chip:hover { background: rgba(201,162,39,0.22); }
 
 /* =========================================================================
    DEMO MODE (MYF-174)
