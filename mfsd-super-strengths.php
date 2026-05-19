@@ -17,6 +17,7 @@ require_once MFSD_SS_PATH . 'includes/class-ss-validator.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-game.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-memory.php';
 require_once MFSD_SS_PATH . 'includes/class-ss-api.php';
+require_once MFSD_SS_PATH . 'includes/class-ss-summary.php';
 
 final class MFSD_Super_Strengths {
 
@@ -33,6 +34,7 @@ final class MFSD_Super_Strengths {
         add_action('rest_api_init', ['MFSD_SS_API', 'register_routes']);
         add_action('admin_menu',    [$this, 'admin_menu']);
 
+        add_filter('stevegpt_plugin_integration_slots', [$this, 'register_stevegpt_slots']);
         add_action('mfsd_ss_turn_timeout_check', ['MFSD_SS_Game', 'run_timeout_check']);
         if (!wp_next_scheduled('mfsd_ss_turn_timeout_check')) {
             wp_schedule_event(time(), 'hourly', 'mfsd_ss_turn_timeout_check');
@@ -132,6 +134,34 @@ final class MFSD_Super_Strengths {
 
     public function admin_page() {
         require_once MFSD_SS_PATH . 'admin/admin-page.php';
+    }
+
+    public function register_stevegpt_slots(array $slots): array {
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Student summary',
+            'option' => 'mfsd_stevegpt_map_ss_student_summary',
+            'tokens' => ['student_name', 'student_age', 'student_self_strengths', 'family_voted_strengths', 'student_sees_parent_strengths', 'lens_context', 'personality_context', 'word_assoc_context'],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Parent summary',
+            'option' => 'mfsd_stevegpt_map_ss_parent_summary',
+            'tokens' => ['parent_name', 'student_name', 'student_age', 'student_self_strengths', 'family_voted_strengths', 'student_sees_parent_strengths', 'personality_context', 'word_assoc_context'],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Student summary chat',
+            'option' => 'mfsd_stevegpt_map_ss_student_summary_chat',
+            'tokens' => [],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Parent summary chat',
+            'option' => 'mfsd_stevegpt_map_ss_parent_summary_chat',
+            'tokens' => [],
+        ];
+        return $slots;
     }
 }
 
