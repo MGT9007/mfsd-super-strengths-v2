@@ -400,9 +400,11 @@ class MFSD_SS_DB {
         add_option('mfsd_stevegpt_map_ss_welcome_chat',    '');
         add_option('mfsd_stevegpt_map_ss_student_summary', '');
         add_option('mfsd_stevegpt_map_ss_parent_summary',  '');
-        add_option('mfsd_stevegpt_map_ss_family_chat',     '');
-        add_option('mfsd_stevegpt_map_ss_demo_picker',     '');
-        add_option('mfsd_stevegpt_map_ss_demo_summary',    '');
+        add_option('mfsd_stevegpt_map_ss_student_summary_chat', '');
+        add_option('mfsd_stevegpt_map_ss_parent_summary_chat',  '');
+        add_option('mfsd_stevegpt_map_ss_demo_picker',          '');
+        add_option('mfsd_stevegpt_map_ss_demo_summary',         '');
+        add_option('mfsd_stevegpt_map_ss_demo_chat',            '');
     }
 
     // ── Seed: 100 Super Strengths ─────────────────────────────────────────────

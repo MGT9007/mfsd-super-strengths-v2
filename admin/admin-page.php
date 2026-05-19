@@ -48,7 +48,7 @@ if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
     update_option('mfsd_ss_demo_mode_enabled',     isset($_POST['demo_mode_enabled']) ? '1' : '0');
     update_option('mfsd_ss_demo_time_limit_mins',  max(1, (int)($_POST['demo_time_limit_mins'] ?? 3)));
     // Memory game SteveGPT slots
-    $sg_keys = ['ss_welcome_intro','ss_welcome_chat','ss_student_summary','ss_parent_summary','ss_family_chat','ss_demo_picker','ss_demo_summary'];
+    $sg_keys = ['ss_welcome_intro','ss_welcome_chat','ss_student_summary','ss_parent_summary','ss_student_summary_chat','ss_parent_summary_chat','ss_demo_picker','ss_demo_summary','ss_demo_chat'];
     foreach ($sg_keys as $k) {
         update_option('mfsd_stevegpt_map_' . $k, sanitize_text_field($_POST['sg_' . $k] ?? ''));
     }
@@ -605,9 +605,11 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
                     'ss_welcome_chat'    => ['Welcome chatbot',     'Chatbot available on the welcome screen.'],
                     'ss_student_summary' => ['Student summary',     'Post-game AI summary for the student.'],
                     'ss_parent_summary'  => ['Parent summary',      'Post-game AI summary for the parent.'],
-                    'ss_family_chat'     => ['Family chatbot',      'Shared chatbot on the results/summary screen.'],
-                    'ss_demo_picker'     => ['Demo card picker',    'Steve AI picks cards for demo mode.'],
-                    'ss_demo_summary'    => ['Demo summary',        'AI summary generated after a demo game.'],
+                    'ss_student_summary_chat' => ['Student summary chatbot', 'Chatbot on the student results/summary screen.'],
+                    'ss_parent_summary_chat'  => ['Parent summary chatbot',  'Chatbot on the parent results/summary screen.'],
+                    'ss_demo_picker'          => ['Demo card picker',         'Steve AI picks cards for demo mode.'],
+                    'ss_demo_summary'         => ['Demo summary',             'AI summary generated after a demo game.'],
+                    'ss_demo_chat'            => ['Demo chatbot',             'Chatbot on the demo results screen.'],
                 ];
                 foreach ($sg_labels as $k => [$label, $desc]):
                     $opt = 'mfsd_stevegpt_map_' . $k;
