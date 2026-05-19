@@ -383,7 +383,7 @@ class MFSD_SS_Demo {
 
         $demo_mins = (int) get_option('mfsd_ss_demo_time_limit_mins', 3);
         if ($demo_mins > 0) {
-            $update_data['game_ends_at'] = gmdate('Y-m-d H:i:s', strtotime("+{$demo_mins} minutes", strtotime($now)));
+            $update_data['game_ends_at'] = gmdate('Y-m-d H:i:s', time() + ($demo_mins * 60));
         }
 
         $wpdb->update($smg, $update_data, ['id' => $game_id]);

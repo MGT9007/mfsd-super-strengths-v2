@@ -31,6 +31,7 @@ final class MFSD_Super_Strengths {
     private function __construct() {
         register_activation_hook(__FILE__, ['MFSD_SS_DB', 'install']);
         register_activation_hook(__FILE__, [$this, 'activate']);
+        add_action('plugins_loaded', [__CLASS__, 'maybe_upgrade_db']);
         add_action('init',          [$this, 'register_assets']);
         add_shortcode('mfsd_super_strengths', [$this, 'shortcode']);
         add_action('rest_api_init', ['MFSD_SS_API', 'register_routes']);
@@ -46,6 +47,14 @@ final class MFSD_Super_Strengths {
     public function activate() {
         // Deregister snap cron replaced by memory-game cron
         wp_clear_scheduled_hook('mfsd_ss_timeout_check');
+    }
+
+    public static function maybe_upgrade_db() {
+        $installed = get_option('mfsd_ss_db_version', '0');
+        if (version_compare($installed, MFSD_SS_VERSION, '<')) {
+            MFSD_SS_DB::install();
+            update_option('mfsd_ss_db_version', MFSD_SS_VERSION);
+        }
     }
 
     public function register_assets() {
@@ -92,6 +101,17 @@ final class MFSD_Super_Strengths {
         if ($age >= 13 && $age <= 14 && get_option('mfsd_ss_free_text_13_14') === '1') $ft_enabled = true;
         elseif ($age >= 11 && $age <= 12 && get_option('mfsd_ss_free_text_11_12') === '1') $ft_enabled = true;
 
+        $steve_avatar_url = '';
+        $demo_chat_id = get_option('mfsd_stevegpt_map_ss_demo_chat', '');
+        if ($demo_chat_id && class_exists('SteveGPT_Chatbot')) {
+            try {
+                $chatbot_obj   = SteveGPT_Chatbot::get($demo_chat_id);
+                $chatbot_cfg   = $chatbot_obj->get_config();
+                $chatbot_app   = $chatbot_cfg['appearance'] ?? [];
+                $steve_avatar_url = $chatbot_app['avatar_image'] ?? '';
+            } catch (\Exception $e) {}
+        }
+
         wp_localize_script('mfsd-ss-js', 'MFSD_SS_CFG', [
             'restUrl'              => rest_url('mfsd-ss/v1/'),
             'nonce'                => wp_create_nonce('wp_rest'),
@@ -124,6 +144,7 @@ final class MFSD_Super_Strengths {
             'studentSummaryChatbotId'     => get_option('mfsd_stevegpt_map_ss_student_summary_chat', ''),
             'parentSummaryChatbotId'      => get_option('mfsd_stevegpt_map_ss_parent_summary_chat', ''),
             'demoChatbotId'               => get_option('mfsd_stevegpt_map_ss_demo_chat', ''),
+            'steveAvatarUrl'              => $steve_avatar_url,
         ]);
 
         return '<div id="mfsd-ss-root"></div>';

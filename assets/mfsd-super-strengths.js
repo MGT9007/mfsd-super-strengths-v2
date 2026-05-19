@@ -3510,8 +3510,11 @@
     const body  = el('div', 'ss-screen-body');
     const inner = el('div', '');
     inner.style.cssText = 'padding:60px 24px;text-align:center;';
+    const avatarHtml = cfg.steveAvatarUrl
+      ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-bottom:16px;animation:ss-bounce 1.2s ease-in-out infinite;">`
+      : `<div style="font-size:64px;margin-bottom:16px;animation:ss-bounce 1.2s ease-in-out infinite;">🤖</div>`;
     inner.innerHTML = `
-      <div style="font-size:64px;margin-bottom:16px;animation:ss-bounce 1.2s ease-in-out infinite;">🤖</div>
+      ${avatarHtml}
       <h2 style="color:#fff;margin:0 0 12px;font-size:20px;">Steve is thinking…</h2>
       <div id="ss-steve-msg" style="color:var(--ss-text-dim);font-size:14px;min-height:22px;">${messages[0]}</div>
       <div class="ss-waiting" style="justify-content:center;margin-top:24px;">

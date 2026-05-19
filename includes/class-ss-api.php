@@ -1810,7 +1810,12 @@ class MFSD_SS_API {
             'turn_timeout_mins' => 0,
             'created_at'        => current_time('mysql'),
         ]);
-        $game_id = $wpdb->insert_id;
+        $game_id = (int) $wpdb->insert_id;
+
+        if (!$game_id) {
+            error_log('MFSD_SS demo_self_submit: game insert failed. DB error: ' . $wpdb->last_error);
+            return self::err('db_error', 'Could not start demo game. Please try again.', 500);
+        }
 
         $wpdb->insert($smp, [
             'game_id'      => $game_id,
@@ -1820,7 +1825,7 @@ class MFSD_SS_API {
             'turn_order'   => 1,
             'joined_at'    => current_time('mysql'),
         ]);
-        $player_id = $wpdb->insert_id;
+        $player_id = (int) $wpdb->insert_id;
 
         foreach ($self_strengths as $text) {
             $wpdb->insert($smss, [
@@ -1835,6 +1840,12 @@ class MFSD_SS_API {
         MFSD_SS_Demo::deal_demo_board($game_id, $player_id, $picks, $self_strengths);
 
         $positions = MFSD_SS_Memory::get_board($game_id);
+
+        if (empty($positions)) {
+            error_log("MFSD_SS demo_self_submit: board empty after deal for game #{$game_id}. DB error: " . $wpdb->last_error);
+            return self::err('board_empty', 'Could not deal the game board. Please try again.', 500);
+        }
+
         $game_row  = $wpdb->get_row($wpdb->prepare("SELECT game_ends_at FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
 
         return rest_ensure_response([
@@ -1911,7 +1922,7 @@ class MFSD_SS_API {
         $expired  = false;
 
         if ($game_row && $game_row['status'] === 'playing' && $game_row['game_ends_at']) {
-            if (current_time('mysql') >= $game_row['game_ends_at']) {
+            if (gmdate('Y-m-d H:i:s') >= $game_row['game_ends_at']) {
                 $expired = true;
                 $smp = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
                 $wpdb->update($smg, [
