@@ -26,9 +26,6 @@ $notice = '';
 
 // ── Save configuration ────────────────────────────────────────────────────────
 if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
-    update_option('mfsd_ss_round_limit',       max(1, (int)($_POST['round_limit'] ?? 3)));
-    update_option('mfsd_ss_turn_timeout',      max(1, (int)($_POST['turn_timeout'] ?? 24)));
-    update_option('mfsd_ss_vote_timeout',      max(1, (int)($_POST['vote_timeout'] ?? 24)));
     update_option('mfsd_ss_free_text_11_12',   isset($_POST['ft_11_12']) ? '1' : '0');
     update_option('mfsd_ss_free_text_13_14',   isset($_POST['ft_13_14']) ? '1' : '0');
     update_option('mfsd_ss_free_text_max',     max(1, min(5, (int)($_POST['ft_max'] ?? 2))));
@@ -277,14 +274,6 @@ $categories = [
 $pending_flags = count($flags);
 
 // =============================================================================
-// VALIDATION: round limit warning
-// =============================================================================
-$round_limit   = (int) get_option('mfsd_ss_round_limit', 3);
-$max_safe_r_5  = 4 * MFSD_SS_DB::CARDS_PER_TARGET; // (5-1) × 5 = 20
-$max_safe_r_6  = 5 * MFSD_SS_DB::CARDS_PER_TARGET; // (6-1) × 5 = 25
-$rl_warning    = ($round_limit > $max_safe_r_5);
-
-// =============================================================================
 // RENDER
 // =============================================================================
 ?>
@@ -349,12 +338,6 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
         }
         .ss-game-card h4 { margin: 0 0 8px; font-size: 15px; }
         .ss-game-card .meta { font-size: 12px; color: #666; }
-        .ss-dealing-preview {
-            background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 6px;
-            padding: 12px; margin: 12px 0; font-size: 13px;
-        }
-        .ss-dealing-preview table { border-collapse: collapse; width: 100%; }
-        .ss-dealing-preview td, .ss-dealing-preview th { padding: 4px 8px; }
         .delete-link { color: #a00; }
         .delete-link:hover { color: #dc3232; }
 
@@ -380,64 +363,11 @@ $rl_warning    = ($round_limit > $max_safe_r_5);
     <div id="ss-tab-config" class="ss-tab-content active">
         <h2>Game Configuration</h2>
 
-        <?php if ($rl_warning): ?>
-        <div class="ss-warn-box">
-            ⚠️ <strong>Round limit warning:</strong> Round limit is set to <?php echo $round_limit; ?>.
-            With 5 players, hand size is <?php echo 4 * MFSD_SS_DB::CARDS_PER_TARGET; ?> cards — any R above <?php echo 4 * MFSD_SS_DB::CARDS_PER_TARGET; ?> means players run out of cards before finishing their turns.
-        </div>
-        <?php endif; ?>
-
         <form method="post">
             <?php wp_nonce_field('mfsd_ss_config'); ?>
             <input type="hidden" name="ss_save_config" value="1">
 
             <table class="form-table"><tbody>
-                <tr>
-                    <th scope="row">Round limit <br><small style="font-weight:400">(5–6 player games)</small></th>
-                    <td>
-                        <input type="number" name="round_limit" id="ss-round-limit"
-                               value="<?php echo (int) get_option('mfsd_ss_round_limit',3); ?>"
-                               min="1" max="25" class="small-text">
-                        <p class="description">
-                            Max turns each player takes. Hand size = (n−1)×5.
-                            3 or 4 players play all cards (limit ignored).<br>
-                            <strong id="ss-rl-hint"></strong>
-                        </p>
-                        <!-- Dealing preview table -->
-                        <div class="ss-dealing-preview" id="ss-deal-preview">
-                            <table>
-                                <tr><th>Players</th><th>Hand size</th><th>R (limit)</th><th>Cards played</th><th>Cards in summary</th><th>Status</th></tr>
-                                <?php foreach ([3,4,5,6] as $n): ?>
-                                <?php $hand = ($n-1)*5; $played = min($hand, $round_limit * $n); $unplayed = ($n*$hand) - ($played * $n); ?>
-                                <tr>
-                                    <td><?php echo $n; ?></td>
-                                    <td><?php echo $hand; ?></td>
-                                    <td><?php echo ($n <= 4) ? 'All' : $round_limit; ?></td>
-                                    <td><?php echo ($n <= 4) ? $n*$hand : min($round_limit,$hand)*$n; ?></td>
-                                    <td><?php echo ($n <= 4) ? 0 : max(0, ($n*$hand) - (min($round_limit,$hand)*$n)); ?></td>
-                                    <td><?php echo ($n <= 4 || $round_limit <= $hand) ? '✅' : '⚠️ R exceeds hand'; ?></td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </table>
-                        </div>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row">Turn timeout (hours)</th>
-                    <td>
-                        <input type="number" name="turn_timeout" value="<?php echo (int) get_option('mfsd_ss_turn_timeout',24); ?>" min="1" class="small-text">
-                        <p class="description">How long a player has to choose and play a card. Default: 24 hours.</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">Vote timeout (hours)</th>
-                    <td>
-                        <input type="number" name="vote_timeout" value="<?php echo (int) get_option('mfsd_ss_vote_timeout',24); ?>" min="1" class="small-text">
-                        <p class="description">How long voting stays open before auto-reveal. Default: 24 hours.</p>
-                    </td>
-                </tr>
-
                 <tr>
                     <th scope="row">Free text (age 11–12)</th>
                     <td><label><input type="checkbox" name="ft_11_12" <?php checked(get_option('mfsd_ss_free_text_11_12'),'1'); ?>> Allow students aged 11–12 to write their own strength phrases</label></td>
@@ -958,26 +888,4 @@ if (demoEnabledCb && demoTimeLimitRow) {
     });
 }
 
-// Round limit hint updater
-const rlInput = document.getElementById('ss-round-limit');
-const rlHint  = document.getElementById('ss-rl-hint');
-if (rlInput && rlHint) {
-    function updateRLHint() {
-        const r = parseInt(rlInput.value) || 3;
-        const maxFor5 = 4 * <?php echo MFSD_SS_DB::CARDS_PER_TARGET; ?>;
-        const maxFor6 = 5 * <?php echo MFSD_SS_DB::CARDS_PER_TARGET; ?>;
-        if (r > maxFor5) {
-            rlHint.style.color = '#b91c1c';
-            rlHint.textContent = '⚠️ R=' + r + ' exceeds hand size for 5-player games (max ' + maxFor5 + ')';
-        } else if (r > maxFor6) {
-            rlHint.style.color = '#b91c1c';
-            rlHint.textContent = '⚠️ R=' + r + ' exceeds hand size for 6-player games (max ' + maxFor6 + ')';
-        } else {
-            rlHint.style.color = '#065f46';
-            rlHint.textContent = '✓ Valid for all player counts up to 6';
-        }
-    }
-    rlInput.addEventListener('input', updateRLHint);
-    updateRLHint();
-}
 </script>
