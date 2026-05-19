@@ -55,6 +55,15 @@ class MFSD_SS_API {
         register_rest_route($ns, '/memory/summary',         [['methods'=>'GET',  'callback'=>[$me,'memory_summary'],         'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/award-badge',     [['methods'=>'POST', 'callback'=>[$me,'memory_award_badge'],     'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/memory/chat-widget',    [['methods'=>'GET',  'callback'=>[$me,'memory_chat_widget'],    'permission_callback'=>[$me,'auth']]]);
+
+        // ── Demo mode (Phase E) ───────────────────────────────────────────────
+        register_rest_route($ns, '/demo/status',      [['methods'=>'GET',  'callback'=>[$me,'demo_status'],      'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/self-submit', [['methods'=>'POST', 'callback'=>[$me,'demo_self_submit'], 'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/board',       [['methods'=>'GET',  'callback'=>[$me,'demo_board'],       'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/flip',        [['methods'=>'POST', 'callback'=>[$me,'demo_flip'],        'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/heartbeat',   [['methods'=>'POST', 'callback'=>[$me,'demo_heartbeat'],   'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/summary',     [['methods'=>'GET',  'callback'=>[$me,'demo_summary'],     'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/chat-widget', [['methods'=>'GET',  'callback'=>[$me,'demo_chat_widget'], 'permission_callback'=>[$me,'auth']]]);
     }
 
     public static function auth()     { return is_user_logged_in(); }
@@ -1723,6 +1732,270 @@ class MFSD_SS_API {
             'viewer_role' => $viewer_role,
             'cards'       => array_values($by_target),
             'ai_summary'  => $ai_summary,
+        ]);
+    }
+
+    // =========================================================================
+    // DEMO MODE — GET /demo/status
+    // =========================================================================
+    public static function demo_status() {
+        $uid  = get_current_user_id();
+        $prereq = MFSD_SS_Demo::check_prerequisites($uid);
+        $status = MFSD_SS_Demo::get_status($uid);
+        return rest_ensure_response([
+            'ok'                => true,
+            'prerequisites_met' => $prereq,
+            'game'              => $status,
+        ]);
+    }
+
+    // =========================================================================
+    // DEMO MODE — POST /demo/self-submit
+    // Creates a new demo game, calls Steve, deals board. Idempotent if student
+    // already has an active demo game (returns existing board instead).
+    // =========================================================================
+    public static function demo_self_submit(WP_REST_Request $req) {
+        global $wpdb;
+        $uid            = get_current_user_id();
+        $self_strengths = $req->get_param('self_strengths');
+
+        if (!is_array($self_strengths) || count($self_strengths) < 1) {
+            return self::err('no_strengths', 'No self-strengths provided');
+        }
+
+        $self_strengths = array_values(array_unique(array_map('sanitize_text_field', $self_strengths)));
+
+        // If active demo game exists, resume it
+        $existing = MFSD_SS_Demo::get_status($uid);
+        if ($existing['found'] && $existing['status'] !== 'complete') {
+            $game_id = $existing['game_id'];
+            $player  = MFSD_SS_Demo::get_player($game_id, $uid);
+            if ($player) {
+                $positions = MFSD_SS_Memory::get_board($game_id);
+                $smg       = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+                $game_row  = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
+                return rest_ensure_response([
+                    'ok'          => true,
+                    'game_id'     => $game_id,
+                    'resumed'     => true,
+                    'positions'   => $positions,
+                    'score'       => (int) $player['score'],
+                    'game_ends_at'=> $game_row['game_ends_at'] ?? null,
+                    'status'      => $existing['status'],
+                ]);
+            }
+        }
+
+        $user      = get_userdata($uid);
+        $age       = (int) get_user_meta($uid, 'mfsd_age', true);
+        $game_key  = 'demo_' . $uid . '_' . time();
+
+        $smg = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $smp = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+        $smss = $wpdb->prefix . MFSD_SS_DB::TBL_SM_SELF_STRENGTHS;
+
+        $wpdb->insert($smg, [
+            'game_key'          => $game_key,
+            'game_type'         => 'demo',
+            'student_user_id'   => $uid,
+            'status'            => 'dealing',
+            'memory_mode'       => 'all_match',
+            'card_pool'         => 'demo_cards',
+            'target_matches'    => 10,
+            'time_limit_mins'   => (int) get_option('mfsd_ss_demo_time_limit_mins', 3),
+            'turn_timeout_mins' => 0,
+            'created_at'        => current_time('mysql'),
+        ]);
+        $game_id = $wpdb->insert_id;
+
+        $wpdb->insert($smp, [
+            'game_id'      => $game_id,
+            'user_id'      => $uid,
+            'display_name' => $user->display_name,
+            'role'         => 'student',
+            'turn_order'   => 1,
+            'joined_at'    => current_time('mysql'),
+        ]);
+        $player_id = $wpdb->insert_id;
+
+        foreach ($self_strengths as $text) {
+            $wpdb->insert($smss, [
+                'game_id'       => $game_id,
+                'player_id'     => $player_id,
+                'strength_text' => $text,
+                'created_at'    => current_time('mysql'),
+            ]);
+        }
+
+        $picks = MFSD_SS_Demo::generate_steve_picks($game_id, $uid, $user->display_name, $age, $self_strengths);
+        MFSD_SS_Demo::deal_demo_board($game_id, $player_id, $picks, $self_strengths);
+
+        $positions = MFSD_SS_Memory::get_board($game_id);
+        $game_row  = $wpdb->get_row($wpdb->prepare("SELECT game_ends_at FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
+
+        return rest_ensure_response([
+            'ok'          => true,
+            'game_id'     => $game_id,
+            'positions'   => $positions,
+            'score'       => 0,
+            'game_ends_at'=> $game_row['game_ends_at'] ?? null,
+            'status'      => 'playing',
+        ]);
+    }
+
+    // =========================================================================
+    // DEMO MODE — GET /demo/board
+    // =========================================================================
+    public static function demo_board(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Demo::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
+
+        $smg      = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $game_row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
+        if (!$game_row || $game_row['game_type'] !== 'demo') {
+            return self::err('not_demo_game', 'Not a demo game', 403);
+        }
+
+        $positions = MFSD_SS_Memory::get_board($game_id);
+        return rest_ensure_response([
+            'ok'          => true,
+            'positions'   => $positions,
+            'score'       => (int) $player['score'],
+            'game_ends_at'=> $game_row['game_ends_at'] ?? null,
+            'status'      => $game_row['status'],
+        ]);
+    }
+
+    // =========================================================================
+    // DEMO MODE — POST /demo/flip
+    // =========================================================================
+    public static function demo_flip(WP_REST_Request $req) {
+        $uid      = get_current_user_id();
+        $game_id  = (int) $req->get_param('game_id');
+        $position = (int) $req->get_param('position');
+
+        $player = MFSD_SS_Demo::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
+
+        $result = MFSD_SS_Demo::flip_card($game_id, (int) $player['id'], $position);
+        if (isset($result['error'])) {
+            return self::err($result['error'], $result['message'], 400);
+        }
+
+        return rest_ensure_response($result);
+    }
+
+    // =========================================================================
+    // DEMO MODE — POST /demo/heartbeat
+    // =========================================================================
+    public static function demo_heartbeat(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Demo::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
+
+        MFSD_SS_Memory::record_heartbeat($game_id, (int) $player['id']);
+
+        $smg      = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $game_row = $wpdb->get_row($wpdb->prepare("SELECT game_ends_at, status FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
+        $expired  = false;
+
+        if ($game_row && $game_row['status'] === 'playing' && $game_row['game_ends_at']) {
+            if (current_time('mysql') >= $game_row['game_ends_at']) {
+                $expired = true;
+                $smp = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+                $wpdb->update($smg, [
+                    'status'           => 'complete',
+                    'winner_player_id' => (int) $player['id'],
+                    'completed_at'     => current_time('mysql'),
+                ], ['id' => $game_id]);
+                $wpdb->update($smp, ['current_turn_started_at' => null], ['id' => (int) $player['id']]);
+            }
+        }
+
+        return rest_ensure_response(['ok' => true, 'time_expired' => $expired]);
+    }
+
+    // =========================================================================
+    // DEMO MODE — GET /demo/summary
+    // =========================================================================
+    public static function demo_summary(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Demo::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
+
+        $smg = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $game_row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
+        if (!$game_row || $game_row['game_type'] !== 'demo') {
+            return self::err('not_demo_game', 'Not a demo game', 403);
+        }
+        if ($game_row['status'] !== 'complete') {
+            return self::err('game_not_complete', 'Demo game not yet complete', 400);
+        }
+
+        $player_id = (int) $player['id'];
+        $data      = MFSD_SS_Demo::get_summary_data($game_id);
+        if (empty($data)) return self::err('no_data', 'Summary data not available', 500);
+
+        $summary = MFSD_SS_Demo::get_or_generate_summary($game_id, $player_id);
+
+        return rest_ensure_response([
+            'ok'               => true,
+            'student_name'     => $data['student_name'],
+            'self_strengths'   => $data['self_strengths'],
+            'picks'            => $data['picks'],
+            'shared_strengths' => $data['shared_strengths'],
+            'hidden_strengths' => $data['hidden_strengths'],
+            'matched_pairs'    => $data['matched_pairs'],
+            'total_pairs'      => $data['total_pairs'],
+            'sections'         => $summary['sections'] ?? [],
+            'ai_summary'       => $summary['raw'] ?? '',
+        ]);
+    }
+
+    // =========================================================================
+    // DEMO MODE — GET /demo/chat-widget
+    // =========================================================================
+    public static function demo_chat_widget(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Demo::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
+
+        $chatbot_id = get_option('mfsd_stevegpt_map_ss_demo_chat', '');
+        if (!$chatbot_id) {
+            return rest_ensure_response(['ok' => false, 'reason' => 'not_configured']);
+        }
+
+        $context         = MFSD_SS_Demo::build_chat_context($game_id);
+        $conversation_id = 'conv_' . bin2hex(random_bytes(8));
+
+        $chatbot    = $wpdb->get_row($wpdb->prepare(
+            "SELECT appearance FROM {$wpdb->prefix}stevegpt_chatbots WHERE chatbot_id = %s AND is_active = 1",
+            $chatbot_id
+        ), ARRAY_A);
+        $appearance = $chatbot ? (json_decode($chatbot['appearance'], true) ?: []) : [];
+
+        return rest_ensure_response([
+            'ok'              => true,
+            'chatbot_id'      => $chatbot_id,
+            'conversation_id' => $conversation_id,
+            'context'         => $context,
+            'avatar'          => $appearance['avatar'] ?? '💬',
+            'avatar_image'    => $appearance['avatar_image'] ?? '',
+            'ai_name'         => $appearance['ai_name'] ?? 'Steve',
+            'greeting'        => $appearance['start_sentence'] ?? 'Hi! Ask me anything about your Super Strengths.',
         ]);
     }
 }
