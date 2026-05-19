@@ -153,6 +153,25 @@
         }
       } catch (_) {}
 
+      // Resume active demo game if one exists
+      if (cfg.demoModeEnabled) {
+        try {
+          const demoSt = await api('demo/status');
+          if (demoSt.prerequisites_met && demoSt.game && demoSt.game.found) {
+            state.gameId   = demoSt.game.game_id;
+            state.gameType = 'demo';
+            if (demoSt.game.status === 'complete') {
+              state.gameStatus = 'complete';
+              renderDemoGameOver();
+            } else {
+              state.gameStatus = 'playing';
+              await renderDemoBoard(true);
+            }
+            return;
+          }
+        } catch(_) {}
+      }
+
       renderNoGame(data);
     } catch (e) {
       unload(lv);
@@ -257,6 +276,12 @@
         }
       };
       inner.appendChild(startBtn);
+      if (cfg.demoModeEnabled) {
+        const demoBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full', '🤖 Try Demo with Steve');
+        demoBtn.style.marginTop = '10px';
+        demoBtn.onclick = handleDemoStart;
+        inner.appendChild(demoBtn);
+      }
       body.appendChild(inner);
 
     // ── Parent: waiting for student to start ───────────────────────────────
@@ -307,6 +332,12 @@
           ${escHtml(data.message || 'No active game found.')}
         </p>
       `;
+      if (cfg.demoModeEnabled && data.viewer_role === 'student') {
+        const demoBtn = el('button', 'ss-btn ss-btn-demo', '🤖 Try Demo with Steve');
+        demoBtn.style.marginTop = '16px';
+        demoBtn.onclick = handleDemoStart;
+        inner.appendChild(demoBtn);
+      }
       body.appendChild(inner);
     }
 
@@ -3156,6 +3187,631 @@
     } catch (_) {
       // Chat unavailable — non-fatal, no UI needed
     }
+  }
+
+  // =========================================================================
+  // DEMO MODE (MYF-174)
+  // =========================================================================
+
+  async function handleDemoStart() {
+    const lv = loading('Checking…');
+    try {
+      const data = await api('demo/status');
+      unload(lv);
+      if (!data.prerequisites_met) {
+        const body  = el('div', 'ss-screen-body');
+        const inner = el('div', '');
+        inner.style.cssText = 'padding:48px 24px;text-align:center;';
+        inner.innerHTML = `
+          <div style="font-size:52px;margin-bottom:16px;">🔒</div>
+          <h2 style="color:#fff;margin:0 0 12px;font-size:20px;">Not Quite Ready</h2>
+          <p style="color:var(--ss-text-dim);font-size:14px;line-height:1.6;max-width:380px;margin:0 auto 24px;">
+            Complete the <strong>Lens</strong>, <strong>Word Association</strong>, and <strong>Personality Test</strong> activities before trying Demo Mode.
+          </p>
+        `;
+        const backBtn = el('button', 'ss-btn ss-btn-ghost', '← Back');
+        backBtn.onclick = () => init();
+        inner.appendChild(backBtn);
+        body.appendChild(inner);
+        render(body);
+        return;
+      }
+      if (data.game && data.game.found && data.game.status === 'complete') {
+        state.gameId     = data.game.game_id;
+        state.gameType   = 'demo';
+        state.gameStatus = 'complete';
+        renderDemoGameOver();
+        return;
+      }
+      if (data.game && data.game.found) {
+        state.gameId     = data.game.game_id;
+        state.gameType   = 'demo';
+        state.gameStatus = 'playing';
+        await renderDemoBoard(true);
+        return;
+      }
+      if (!Object.keys(state.strengths).length) await loadStrengths();
+      renderDemoSelfWrite();
+    } catch (e) {
+      unload(lv);
+      renderError(e.message);
+    }
+  }
+
+  function renderDemoSelfWrite() {
+    const required = 5;
+    const body     = el('div', 'ss-screen-body');
+    body.innerHTML = `
+      <div class="ss-game-header">
+        <div class="ss-game-title">✨ Choose Your Strengths</div>
+        <div class="ss-game-sub" id="ss-demo-self-count">${state.draftSelf.length}/${required} selected</div>
+      </div>
+    `;
+    const inner = el('div', '');
+    inner.style.padding = '20px';
+    inner.innerHTML += `
+      <div class="ss-card" style="margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--ss-text);">
+        Pick the <strong>5 strengths</strong> that best describe you.
+        Steve will study your choices alongside your Lens, Word Association, and Personality Test data — then pick 5 more he thinks match you.
+        You'll play a solo memory game to discover what he found!
+      </div>
+    `;
+
+    const tagLabel = el('div', 'ss-section-label', 'Your selected strengths');
+    inner.appendChild(tagLabel);
+    const tagCloud = el('div', 'ss-tag-cloud');
+    tagCloud.id = 'ss-demo-self-tags';
+    inner.appendChild(tagCloud);
+    refreshDemoSelfTags(tagCloud, required);
+
+    const search = el('input', 'ss-input');
+    search.placeholder = '🔍 Search strengths…';
+    search.style.marginBottom = '10px';
+    search.oninput = () => filterDemoSelf(search.value);
+    inner.appendChild(search);
+
+    const cats   = Object.keys(state.strengths);
+    const tabBar = el('div', 'ss-cat-tabs');
+    const allTab = el('button', 'ss-cat-tab active', 'All');
+    allTab.dataset.cat = 'all';
+    tabBar.appendChild(allTab);
+    cats.forEach(cat => {
+      if (cat === 'Family') return;
+      const shortNames = { 'Creative & Expressive': 'Creative', 'Mind & Learning': 'Mind', 'Leadership & Drive': 'Leadership', 'Practical & Dependable': 'Practical', 'Growth & Mindset': 'Growth', 'Social & Caring': 'Social' };
+      const btn = el('button', 'ss-cat-tab', shortNames[cat] || cat);
+      btn.dataset.cat = cat;
+      tabBar.appendChild(btn);
+    });
+    inner.appendChild(tabBar);
+    tabBar.addEventListener('click', e => {
+      const btn = e.target.closest('.ss-cat-tab');
+      if (!btn) return;
+      tabBar.querySelectorAll('.ss-cat-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      filterDemoSelf(search.value, btn.dataset.cat);
+    });
+
+    const grid = el('div', '');
+    grid.id = 'ss-demo-self-grid';
+    grid.style.cssText = 'max-height:260px;overflow-y:auto;padding-right:4px;';
+    inner.appendChild(grid);
+    renderDemoSelfList(grid);
+
+    const submitBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full', '🤖 Let Steve Analyse →');
+    submitBtn.style.marginTop = '16px';
+    submitBtn.id = 'ss-demo-self-submit';
+    if (state.draftSelf.length < required) submitBtn.disabled = true;
+    submitBtn.onclick = () => {
+      if (state.draftSelf.length < required) return;
+      renderSteveThinking(state.draftSelf.map(d => d.strength_text));
+    };
+    inner.appendChild(submitBtn);
+
+    body.appendChild(inner);
+    render(body);
+
+    function filterDemoSelf(q, cat) {
+      const activeCat = cat || tabBar.querySelector('.ss-cat-tab.active')?.dataset.cat || 'all';
+      renderDemoSelfList(document.getElementById('ss-demo-self-grid'), activeCat, q);
+    }
+  }
+
+  function renderDemoSelfList(container, cat = 'all', query = '') {
+    if (!container) return;
+    const used = state.draftSelf.map(d => d.strength_text.toLowerCase());
+    container.innerHTML = '';
+    Object.entries(state.strengths).forEach(([category, items]) => {
+      if (category === 'Family') return;
+      if (cat !== 'all' && cat !== category) return;
+      const filtered = query ? items.filter(s => s.text.toLowerCase().includes(query.toLowerCase())) : items;
+      if (!filtered.length) return;
+      const label = el('div', 'ss-cat-label');
+      label.style.color = 'rgba(155,110,243,0.7)';
+      label.textContent = category;
+      container.appendChild(label);
+      const g = el('div', 'ss-strength-grid');
+      filtered.forEach(s => {
+        const isUsed = used.includes(s.text.toLowerCase());
+        const chip   = el('div', 'ss-strength-chip' + (isUsed ? ' used' : ''), s.text + (isUsed ? ' ✓' : ''));
+        if (!isUsed) {
+          chip.onclick = () => {
+            if (state.draftSelf.length >= 5) return;
+            state.draftSelf.push({ strength_id: s.id, strength_text: s.text });
+            chip.classList.add('used');
+            chip.textContent = s.text + ' ✓';
+            chip.onclick = null;
+            updateDemoSelfUI();
+          };
+        }
+        g.appendChild(chip);
+      });
+      container.appendChild(g);
+    });
+  }
+
+  function refreshDemoSelfTags(container, required) {
+    container.innerHTML = '';
+    if (!state.draftSelf.length) {
+      container.innerHTML = '<span style="color:var(--ss-text-dim);font-size:12px;">No strengths selected yet — tap one below</span>';
+      return;
+    }
+    state.draftSelf.forEach(d => {
+      const tag = el('div', 'ss-tag');
+      tag.innerHTML = escHtml(d.strength_text) + '<span class="ss-tag-remove" data-text="' + escHtml(d.strength_text) + '">×</span>';
+      tag.querySelector('.ss-tag-remove').onclick = () => {
+        state.draftSelf = state.draftSelf.filter(x => x.strength_text !== d.strength_text);
+        refreshDemoSelfTags(container, required);
+        updateDemoSelfUI();
+        const grid = document.getElementById('ss-demo-self-grid');
+        if (grid) renderDemoSelfList(grid, 'all');
+      };
+      container.appendChild(tag);
+    });
+  }
+
+  function updateDemoSelfUI() {
+    const required = 5;
+    const sub = document.getElementById('ss-demo-self-count');
+    if (sub) sub.textContent = state.draftSelf.length + '/' + required + ' selected';
+    const btn = document.getElementById('ss-demo-self-submit');
+    if (btn) btn.disabled = state.draftSelf.length < required;
+    const tags = document.getElementById('ss-demo-self-tags');
+    if (tags) refreshDemoSelfTags(tags, required);
+  }
+
+  async function renderSteveThinking(selfStrengths) {
+    const messages = [
+      '🔍 Scanning your strengths library…',
+      '🧠 Analysing your Word Association results…',
+      '🎭 Reviewing your personality profile…',
+      '💡 Cross-referencing Lens activity data…',
+      '⭐ Selecting Steve\'s top 5 picks…',
+      '🃏 Shuffling and dealing your board…',
+    ];
+    let msgIdx  = 0;
+    const body  = el('div', 'ss-screen-body');
+    const inner = el('div', '');
+    inner.style.cssText = 'padding:60px 24px;text-align:center;';
+    inner.innerHTML = `
+      <div style="font-size:64px;margin-bottom:16px;animation:ss-bounce 1.2s ease-in-out infinite;">🤖</div>
+      <h2 style="color:#fff;margin:0 0 12px;font-size:20px;">Steve is thinking…</h2>
+      <div id="ss-steve-msg" style="color:var(--ss-text-dim);font-size:14px;min-height:22px;">${messages[0]}</div>
+      <div class="ss-waiting" style="justify-content:center;margin-top:24px;">
+        <div class="ss-dots"><span></span><span></span><span></span></div>
+      </div>
+    `;
+    body.appendChild(inner);
+    render(body);
+
+    const msgEl    = document.getElementById('ss-steve-msg');
+    const msgTimer = setInterval(() => {
+      msgIdx = (msgIdx + 1) % messages.length;
+      if (msgEl) msgEl.textContent = messages[msgIdx];
+    }, 1800);
+
+    try {
+      const res = await api('demo/self-submit', 'POST', { self_strengths: selfStrengths });
+      clearInterval(msgTimer);
+      if (!res.ok) { renderError(res.message || 'Steve could not analyse your strengths. Please try again.'); return; }
+      state.gameId     = res.game_id;
+      state.gameType   = 'demo';
+      state.gameStatus = 'playing';
+      state.board      = res.positions || [];
+      state.gameEndsAt = res.game_ends_at || null;
+      await renderDemoBoard(false);
+    } catch (e) {
+      clearInterval(msgTimer);
+      renderError(e.message);
+    }
+  }
+
+  async function renderDemoBoard(fetchFresh) {
+    stopPoll();
+    startDemoHeartbeat();
+    if (fetchFresh) {
+      const lv = loading('Loading board…');
+      try {
+        const boardData = await api('demo/board?game_id=' + state.gameId);
+        unload(lv);
+        if (boardData.status === 'complete') {
+          stopDemoHeartbeat();
+          state.gameStatus = 'complete';
+          renderDemoGameOver();
+          return;
+        }
+        state.board      = boardData.positions    || [];
+        state.gameEndsAt = boardData.game_ends_at || null;
+      } catch (e) {
+        unload(lv);
+        renderError(e.message);
+        return;
+      }
+    }
+    renderDemoBoardUI(state.board);
+  }
+
+  function startDemoHeartbeat() {
+    stopHeartbeat();
+    state.heartbeatTimer = setInterval(async () => {
+      try {
+        const res = await api('demo/heartbeat', 'POST', { game_id: state.gameId });
+        if (res.time_expired) {
+          stopHeartbeat();
+          state.gameStatus = 'complete';
+          renderDemoGameOver();
+        }
+      } catch(_) {}
+    }, 30000);
+  }
+
+  function renderDemoBoardUI(positions) {
+    const body = el('div', 'ss-screen-body');
+
+    const header = el('div', 'ss-game-header');
+    header.innerHTML = '<div class="ss-game-title">🤖 Steve\'s Demo</div>';
+    body.appendChild(header);
+
+    const matchedPairs = positions.filter(p => p.is_matched).length / 2;
+    const totalPairs   = positions.length / 2;
+
+    const scoreBar = el('div', 'ss-demo-score-bar');
+    scoreBar.innerHTML = `<span>⭐ Pairs matched: <strong id="ss-demo-score">${Math.round(matchedPairs)}</strong> / ${totalPairs}</span>`;
+    body.appendChild(scoreBar);
+
+    if (state.gameEndsAt) {
+      const timerEl = el('div', 'ss-game-timer');
+      timerEl.id    = 'ss-demo-timer';
+      const endsAt  = new Date(state.gameEndsAt.replace(' ', 'T') + 'Z');
+      const updateTimer = () => {
+        const secs = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+        const m    = Math.floor(secs / 60).toString().padStart(2, '0');
+        const s    = (secs % 60).toString().padStart(2, '0');
+        timerEl.textContent = '⏱ ' + m + ':' + s;
+        if (secs === 0) {
+          clearInterval(timerEl._clockInterval);
+          stopHeartbeat();
+          state.gameStatus = 'complete';
+          setTimeout(() => renderDemoGameOver(), 800);
+        }
+      };
+      updateTimer();
+      timerEl._clockInterval = setInterval(updateTimer, 1000);
+      body.appendChild(timerEl);
+    }
+
+    const boardGrid = el('div', 'ss-board-grid ss-board-grid-4');
+    positions.forEach(pos => {
+      const tile = el('div', 'ss-card-tile');
+      if (pos.is_matched) {
+        tile.classList.add('matched');
+        const steveCls = pos.content && pos.content.card_type === 'steve_pick' ? ' ss-ct-steve' : '';
+        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label${steveCls}">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+      } else if (pos.is_face_up) {
+        tile.classList.add('face-up');
+        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+      } else {
+        tile.innerHTML = `<div class="ss-card-tile-back"><span class="ss-ct-back-icon">⭐</span></div>`;
+        tile.classList.add('flippable');
+        tile.addEventListener('click', () => handleDemoFlip(pos.position, tile, boardGrid));
+      }
+      boardGrid.appendChild(tile);
+    });
+
+    body.appendChild(boardGrid);
+    render(body);
+  }
+
+  async function handleDemoFlip(position, tileEl, boardGrid) {
+    if (tileEl.classList.contains('flipping')) return;
+    tileEl.classList.add('flipping');
+    boardGrid.querySelectorAll('.flippable').forEach(t => {
+      t.classList.remove('flippable');
+      t.onclick = null;
+    });
+
+    try {
+      const res = await api('demo/flip', 'POST', { game_id: state.gameId, position });
+
+      if (res.flip_number === 1) {
+        const boardPos = state.board.find(p => p.position === position);
+        if (boardPos) { boardPos.is_face_up = true; boardPos.content = res.content; }
+        state.pendingFlipPos = position;
+        renderDemoBoardUI(state.board);
+        return;
+      }
+
+      const boardPos = state.board.find(p => p.position === position);
+      if (boardPos) {
+        boardPos.is_face_up = true;
+        boardPos.content    = res.is_match ? (res.matched_pair ? res.matched_pair[1] : boardPos.content) : (res.flip2_content || boardPos.content);
+      }
+
+      if (res.is_match) {
+        state.board.forEach(p => { if (p.is_face_up && !p.is_matched) { p.is_matched = true; p.is_face_up = false; } });
+        state.pendingFlipPos = null;
+
+        const scoreEl = document.getElementById('ss-demo-score');
+        if (scoreEl) scoreEl.textContent = Math.round(state.board.filter(p => p.is_matched).length / 2);
+
+        const isSteveMatch = res.matched_pair && res.matched_pair[0] && res.matched_pair[0].card_type === 'steve_pick';
+
+        if (res.game_complete) {
+          stopHeartbeat();
+          state.gameStatus = 'complete';
+          if (isSteveMatch && res.rationale) await showDemoRationale(res.rationale, res.source_activity);
+          else await showMatchMoment(res.matched_pair, false);
+          renderDemoGameOver();
+          return;
+        }
+
+        if (isSteveMatch && res.rationale) await showDemoRationale(res.rationale, res.source_activity);
+        else await showMatchMoment(res.matched_pair, false);
+        renderDemoBoardUI(state.board);
+      } else {
+        renderDemoBoardUI(state.board);
+        await new Promise(r => setTimeout(r, 1500));
+        state.board.forEach(p => { if (p.is_face_up && !p.is_matched) p.is_face_up = false; });
+        state.pendingFlipPos = null;
+        renderDemoBoardUI(state.board);
+      }
+    } catch (e) {
+      renderError(e.message);
+    }
+  }
+
+  function showDemoRationale(rationale, sourceActivity) {
+    return new Promise(resolve => {
+      const sourceLabel = {
+        'lens':          '🔭 Lens',
+        'word_assoc':    '💬 Word Association',
+        'personality':   '🎭 Personality Test',
+        'self_strength': '⭐ Your Strengths',
+      }[sourceActivity] || String(sourceActivity || 'Steve');
+
+      const overlay = el('div', 'ss-demo-rationale-overlay');
+      overlay.innerHTML = `
+        <div class="ss-demo-rationale-box">
+          <div class="ss-demo-rationale-icon">🤖</div>
+          <div class="ss-demo-rationale-title">Steve's Pick!</div>
+          <div class="ss-demo-rationale-source">${escHtml(sourceLabel)}</div>
+          <div class="ss-demo-rationale-text">${escHtml(rationale || '')}</div>
+          <button class="ss-btn ss-btn-demo ss-btn-sm ss-demo-rationale-ok">Got it ✓</button>
+        </div>
+      `;
+      document.getElementById('mfsd-ss-root').appendChild(overlay);
+      overlay.querySelector('.ss-demo-rationale-ok').onclick = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => { overlay.remove(); resolve(); }, 300);
+      };
+    });
+  }
+
+  function renderDemoGameOver() {
+    stopPoll(); stopHeartbeat();
+    const matchedPairs = state.board.filter(p => p.is_matched).length / 2;
+    const totalPairs   = state.board.length / 2;
+    const perfect      = matchedPairs >= totalPairs && totalPairs > 0;
+
+    const body   = el('div', 'ss-screen-body');
+    const header = el('div', 'ss-game-header');
+    header.innerHTML = '<div class="ss-game-title">🤖 Demo Complete!</div>';
+    body.appendChild(header);
+
+    const inner = el('div', '');
+    inner.style.cssText = 'padding:32px 20px;text-align:center;';
+    inner.innerHTML = `
+      <div style="font-size:56px;margin-bottom:16px;">${perfect ? '🏆' : '🌟'}</div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:8px;">${perfect ? 'Perfect Score!' : 'Nice work!'}</div>
+      <div style="font-size:15px;color:var(--ss-text-dim);margin-bottom:28px;">
+        You matched ${Math.round(matchedPairs)} of ${totalPairs} pairs
+      </div>
+    `;
+    body.appendChild(inner);
+
+    const btnWrap = el('div', '');
+    btnWrap.style.cssText = 'padding:0 20px 32px;display:flex;flex-direction:column;gap:12px;';
+    const summaryBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full', '💡 See Steve\'s Analysis →');
+    summaryBtn.onclick = renderDemoSummary;
+    btnWrap.appendChild(summaryBtn);
+    body.appendChild(btnWrap);
+    render(body);
+  }
+
+  async function renderDemoSummary() {
+    const body    = el('div', 'ss-screen-body');
+    const loadDiv = el('div', '');
+    loadDiv.style.cssText = 'padding:60px 20px;text-align:center;';
+    loadDiv.innerHTML = '<div class="ss-waiting"><div class="ss-dots"><span></span><span></span><span></span></div>'
+      + '<div style="margin-top:14px;color:var(--ss-text-dim);font-size:14px;">Steve is writing your analysis…</div></div>';
+    body.appendChild(loadDiv);
+    render(body);
+
+    try {
+      const data = await api('demo/summary?game_id=' + state.gameId, 'GET');
+      renderDemoSummaryUI(data);
+    } catch (e) {
+      const b = el('div', 'ss-screen-body');
+      b.innerHTML = '<div style="padding:40px;text-align:center;">'
+        + '<div style="color:var(--ss-red);margin-bottom:16px;">Could not load summary. Please try again.</div>'
+        + '<button class="ss-btn ss-btn-demo" onclick="location.reload()">Reload</button></div>';
+      render(b);
+    }
+  }
+
+  function renderDemoSummaryUI(data) {
+    const body   = el('div', 'ss-screen-body');
+    const header = el('div', 'ss-game-header');
+    header.innerHTML = '<div class="ss-game-title">💡 Steve\'s Analysis</div>'
+      + '<div class="ss-game-sub">' + escHtml(data.student_name || cfg.displayName) + '</div>';
+    body.appendChild(header);
+
+    const inner = el('div', '');
+    inner.style.paddingBottom = '32px';
+
+    // Your 5 vs Steve's 5
+    const compareCard = el('div', 'ss-card');
+    compareCard.style.margin = '16px';
+    compareCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;">Your 5 vs Steve\'s 5</div>';
+
+    const compareGrid = el('div', 'ss-demo-compare-grid');
+
+    const selfCol = el('div', 'ss-demo-compare-col');
+    selfCol.innerHTML = '<div class="ss-demo-compare-heading">You chose</div>';
+    (data.self_strengths || []).forEach(s => selfCol.appendChild(el('div', 'ss-strength-chip', s)));
+    compareGrid.appendChild(selfCol);
+
+    const steveCol = el('div', 'ss-demo-compare-col ss-demo-compare-col-steve');
+    steveCol.innerHTML = '<div class="ss-demo-compare-heading">🤖 Steve picked</div>';
+    (data.picks || []).forEach(p => steveCol.appendChild(el('div', 'ss-strength-chip ss-chip-steve', p.strength_text || p)));
+    compareGrid.appendChild(steveCol);
+    compareCard.appendChild(compareGrid);
+
+    if ((data.shared_strengths || []).length || (data.hidden_strengths || []).length) {
+      const insightRow = el('div', 'ss-demo-insight-row');
+      if ((data.shared_strengths || []).length) {
+        const shared = el('div', 'ss-demo-insight-box ss-demo-insight-shared');
+        shared.innerHTML = '<div class="ss-demo-insight-label">💚 You both agree</div>';
+        data.shared_strengths.forEach(s => shared.appendChild(el('div', 'ss-demo-insight-item', s)));
+        insightRow.appendChild(shared);
+      }
+      if ((data.hidden_strengths || []).length) {
+        const hidden = el('div', 'ss-demo-insight-box ss-demo-insight-hidden');
+        hidden.innerHTML = '<div class="ss-demo-insight-label">🔭 Steve sees in you</div>';
+        data.hidden_strengths.forEach(s => hidden.appendChild(el('div', 'ss-demo-insight-item', s)));
+        insightRow.appendChild(hidden);
+      }
+      compareCard.appendChild(insightRow);
+    }
+    inner.appendChild(compareCard);
+
+    // AI sections
+    const sections = data.sections || {};
+    if (Object.keys(sections).length) {
+      const aiCard = el('div', 'ss-card');
+      aiCard.style.margin = '0 16px 16px';
+      aiCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;">🤖 Steve says…</div>';
+      aiCard.appendChild(renderAISectionTabs(sections));
+      inner.appendChild(aiCard);
+    }
+
+    const chatEl = el('div', '');
+    chatEl.id    = 'ss-demo-chat-placeholder';
+    chatEl.style.padding = '0 16px 16px';
+    inner.appendChild(chatEl);
+
+    body.appendChild(inner);
+    render(body);
+    initDemoChatWidget(document.getElementById('ss-demo-chat-placeholder'));
+  }
+
+  async function initDemoChatWidget(placeholder) {
+    if (!placeholder || placeholder.dataset.initialized) return;
+    placeholder.dataset.initialized = 'true';
+    if (!cfg.demoChatbotId) return;
+
+    try {
+      const config = await api('demo/chat-widget?game_id=' + state.gameId, 'GET');
+      if (!config.ok || !config.chatbot_id) return;
+
+      const widget     = el('div', 'ss-chat-widget');
+      const chatHeader = el('div', 'ss-chat-header');
+      chatHeader.innerHTML = '<span class="ss-chat-avatar-text">' + escHtml(config.avatar || '🤖') + '</span>'
+        + '<span class="ss-chat-name">' + escHtml(config.ai_name || 'Steve') + '</span>';
+      widget.appendChild(chatHeader);
+
+      const msgs     = el('div', 'ss-chat-messages');
+      const greeting = el('div', 'ss-chat-msg ai');
+      greeting.textContent = config.greeting || 'Ask me about your strengths analysis!';
+      msgs.appendChild(greeting);
+      widget.appendChild(msgs);
+
+      const inputRow = el('div', 'ss-chat-input-row');
+      const input    = el('textarea', 'ss-chat-input');
+      input.placeholder = 'Ask me anything…';
+      input.rows = 1;
+      const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
+
+      const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
+      const nonce   = (window.stevegpt || {}).nonce   || '';
+
+      async function sendMessage() {
+        const msg = input.value.trim();
+        if (!msg || sendBtn.disabled) return;
+        input.value = '';
+        input.style.height = 'auto';
+        sendBtn.disabled = true;
+
+        const userMsg = el('div', 'ss-chat-msg user');
+        userMsg.textContent = msg;
+        msgs.appendChild(userMsg);
+
+        const typing = html('div', 'ss-chat-msg ai typing-dots',
+          '<div class="ss-dots"><span></span><span></span><span></span></div>');
+        msgs.appendChild(typing);
+        msgs.scrollTop = msgs.scrollHeight;
+
+        try {
+          const res  = await fetch(ajaxUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            credentials: 'same-origin',
+            body: new URLSearchParams({
+              action:          'stevegpt_send_message',
+              nonce,
+              chatbot_id:      config.chatbot_id,
+              conversation_id: config.conversation_id || '',
+              message:         msg,
+              context:         config.context || '',
+            }),
+          });
+          const json = await res.json();
+          typing.remove();
+          const aiMsg = el('div', 'ss-chat-msg ai');
+          aiMsg.textContent = json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.';
+          msgs.appendChild(aiMsg);
+        } catch (_) {
+          typing.remove();
+          const errMsg = el('div', 'ss-chat-msg ai');
+          errMsg.textContent = 'Connection error. Please try again.';
+          msgs.appendChild(errMsg);
+        }
+        sendBtn.disabled = false;
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+
+      sendBtn.onclick = sendMessage;
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      });
+      input.addEventListener('input', () => {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+      });
+      inputRow.appendChild(input);
+      inputRow.appendChild(sendBtn);
+      widget.appendChild(inputRow);
+      placeholder.appendChild(widget);
+    } catch (_) {}
   }
 
   // =========================================================================
