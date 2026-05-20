@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
- * Version: 5.0.9
+ * Version: 5.1.0
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '5.0.9');
+define('MFSD_SS_VERSION', '5.1.0');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -117,6 +117,22 @@ final class MFSD_Super_Strengths {
             }
         }
 
+        // Build welcome chat context server-side (same pattern as Who Am I)
+        $demo_enabled  = get_option('mfsd_ss_demo_mode_enabled', '0') === '1';
+        $game_mode_str = $demo_enabled ? 'demo' : get_option('mfsd_ss_mode', 'full');
+        $age_str       = $age > 0 ? (string) $age : 'unknown';
+        $ctx_parts     = [
+            "Student name: {$user->display_name}.",
+            "Student age: {$age_str}.",
+            "Game mode: {$game_mode_str}.",
+        ];
+        if ($demo_enabled) {
+            $demo_secs   = (int) get_option('mfsd_ss_demo_time_limit_mins', 3) * 60;
+            $ctx_parts[] = "Demo time limit: {$demo_secs} seconds. Board: 20 tiles (5 student picks + 5 Steve picks, each duplicated into pairs).";
+        }
+        $ctx_parts[]          = 'Use this context to personalise your responses to this student.';
+        $welcome_chat_context = implode(' ', $ctx_parts);
+
         wp_localize_script('mfsd-ss-js', 'MFSD_SS_CFG', [
             'restUrl'              => rest_url('mfsd-ss/v1/'),
             'nonce'                => wp_create_nonce('wp_rest'),
@@ -150,6 +166,7 @@ final class MFSD_Super_Strengths {
             'parentSummaryChatbotId'      => get_option('mfsd_stevegpt_map_ss_parent_summary_chat', ''),
             'demoChatbotId'               => get_option('mfsd_stevegpt_map_ss_demo_chat', ''),
             'steveAvatarUrl'              => $steve_avatar_url,
+            'welcomeChatContext'          => $welcome_chat_context,
         ]);
 
         return '<div id="mfsd-ss-root"></div>';

@@ -549,21 +549,7 @@
     const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
     const nonce   = (window.stevegpt || {}).nonce   || '';
 
-    // Build game context once; prepend to the first message so Steve knows the mode
-    let contextPrefix = '';
-    {
-      const mode     = cfg.demoModeEnabled ? 'demo' : 'family';
-      const timeSecs = (cfg.demoTimeLimitMins || 3) * 60;
-      contextPrefix  = `STUDENT CONTEXT:\nName: ${cfg.displayName}\nAge: ${+cfg.playerAge || 'unknown'}\n\nGAME CONTEXT:\nMode: ${mode}\n`;
-      if (cfg.demoModeEnabled) {
-        contextPrefix += `Time limit: ${timeSecs} seconds\nBoard: 20 tiles (5 student picks + 5 Steve picks, each duplicated into pairs)\n`;
-      }
-      contextPrefix += '\nQuestion: ';
-    }
-    let contextAttached = false;
-
     newChatBtn.onclick = () => {
-      // Clear messages back to just the greeting, reset context
       while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
       msgs.appendChild(makeAiRow('Hi! Ask me anything about the game — I\'m here to help before you get started.'));
       const freshChips = el('div', 'ss-chat-chips');
@@ -573,7 +559,6 @@
         freshChips.appendChild(btn);
       });
       msgs.appendChild(freshChips);
-      contextAttached = false;
       input.value = '';
       input.style.height = 'auto';
     };
@@ -588,9 +573,6 @@
       userMsg.textContent = msg;
       msgs.appendChild(userMsg);
 
-      // Prepend context to first message only — shown cleanly in UI, sent with context to AI
-      const serverMsg = contextAttached ? msg : (contextAttached = true, contextPrefix + msg);
-
       const typingRow = makeTypingRow();
       msgs.appendChild(typingRow);
       msgs.scrollTop = msgs.scrollHeight;
@@ -604,7 +586,8 @@
             action:     'stevegpt_send_message',
             nonce,
             chatbot_id: cfg.welcomeChatChatbotId,
-            message:    serverMsg,
+            message:    msg,
+            context:    cfg.welcomeChatContext || '',
           }),
         });
         const json = await res.json();
