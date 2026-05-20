@@ -1909,8 +1909,12 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   width: 90%;
   text-align: center;
 }
-.ss-demo-rationale-icon { font-size: 40px; margin-bottom: 8px; }
-.ss-demo-rationale-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.ss-demo-rationale-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.ss-demo-rationale-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; display: block; }
 .ss-demo-rationale-subtitle { font-size: 12px; color: var(--ss-text-dim); margin-bottom: 4px; }
 .ss-demo-rationale-strength { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 20px; line-height: 1.3; }
 .ss-demo-rationale-title { font-size: 18px; font-weight: 700; color: var(--ss-gold); margin-bottom: 6px; }
@@ -1933,7 +1937,32 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   margin-bottom: 20px;
 }
 
-/* Steve Thinking spinner (MYF-216) */
+/* Steve Thinking screen (MYF-216) */
+.ss-steve-thinking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 24px;
+}
+.ss-steve-thinking-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 20px;
+  animation: ss-bounce 1.2s ease-in-out infinite;
+}
+.ss-steve-thinking-emoji {
+  font-size: 64px;
+  line-height: 1;
+  margin-bottom: 16px;
+  animation: ss-bounce 1.2s ease-in-out infinite;
+}
+
+/* Steve Thinking spinner */
 .ss-steve-spinner {
   width: 36px;
   height: 36px;

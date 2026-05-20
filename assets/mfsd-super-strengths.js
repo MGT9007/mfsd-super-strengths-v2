@@ -3642,11 +3642,10 @@
     ];
     let msgIdx  = 0;
     const body  = el('div', 'ss-screen-body');
-    const inner = el('div', '');
-    inner.style.cssText = 'padding:60px 24px;text-align:center;';
+    const inner = el('div', 'ss-steve-thinking');
     const avatarHtml = cfg.steveAvatarUrl
-      ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-bottom:16px;animation:ss-bounce 1.2s ease-in-out infinite;">`
-      : `<div style="font-size:64px;margin-bottom:16px;animation:ss-bounce 1.2s ease-in-out infinite;">🤖</div>`;
+      ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-steve-thinking-avatar">`
+      : `<div class="ss-steve-thinking-emoji">🤖</div>`;
     inner.innerHTML = `
       ${avatarHtml}
       <h2 style="color:#fff;margin:0 0 12px;font-size:20px;">Steve is thinking…</h2>
@@ -3834,11 +3833,14 @@
   function showDemoRationale(rationale, sourceActivity) {
     return new Promise(resolve => {
       const sourceLabel = {
-        'lens':          '🔭 Lens',
-        'word_assoc':    '💬 Word Association',
-        'personality':   '🎭 Personality Test',
-        'self_strength': '⭐ Your Strengths',
-      }[sourceActivity] || String(sourceActivity || 'Steve');
+        'lens':             '🔭 Lens',
+        'word_assoc':       '💬 Word Association',
+        'word_association': '💬 Word Association',
+        'personality':      '🎭 Personality Test',
+        'self_strength':    '⭐ Your Strengths',
+        'self_strengths':   '⭐ Your Strengths',
+        'library':          '📚 Strengths Library',
+      }[sourceActivity] || '⭐ Steve\'s Pick';
 
       const overlay = el('div', 'ss-demo-rationale-overlay');
       const avatarHtml = cfg.steveAvatarUrl
