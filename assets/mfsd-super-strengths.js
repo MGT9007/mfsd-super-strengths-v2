@@ -81,6 +81,64 @@
 
   function stopPoll() { if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; } }
 
+  // ── Steve avatar helper ────────────────────────────────────────────────────
+  function steveAvatarImg(cls, sizePx) {
+    if (!cfg.steveAvatarUrl) return '';
+    return `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="${cls}" style="width:${sizePx}px;height:${sizePx}px;border-radius:50%;object-fit:cover;flex-shrink:0;">`;
+  }
+
+  // ── Card front builder (MYF-219, MYF-220) ─────────────────────────────────
+  const VERB_STRENGTH_STARTS = ['sees','brings','gets','always','pays','thinks outside','makes','leads','helps','gives','takes','shows','finds','keeps','builds','you can'];
+  function isVerbStrength(s) {
+    const l = s.toLowerCase().trim();
+    return VERB_STRENGTH_STARTS.some(v => l.startsWith(v));
+  }
+
+  const _parentColours = ['#9333EA', '#22c55e', '#f97316', '#ec4899'];
+  const _authorColourMap = {};
+  let   _authorColourIdx = 0;
+  function authorColour(name) {
+    if (!_authorColourMap[name]) _authorColourMap[name] = _parentColours[_authorColourIdx++ % _parentColours.length];
+    return _authorColourMap[name];
+  }
+
+  function buildCardFront(content) {
+    if (!content) return '<div class="ss-card-tile-front"></div>';
+    const type    = content.card_type || '';
+    const sRaw    = content.strength_text || '';
+    const sLower  = sRaw.toLowerCase();
+    const author  = content.author_display || '';
+
+    let borderColour, avatarHtml, prefixText;
+
+    if (type === 'steve_pick') {
+      borderColour = '#00D4FF';
+      avatarHtml   = cfg.steveAvatarUrl
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-card-avatar">`
+        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:rgba(0,212,255,0.15);color:#00D4FF">S</span>`;
+      prefixText = 'Steve thinks';
+    } else if (type === 'self_strength') {
+      borderColour = '#e6a817';
+      const init   = (cfg.displayName || 'Y')[0].toUpperCase();
+      avatarHtml   = `<span class="ss-card-avatar ss-card-avatar-init" style="background:rgba(230,168,23,0.15);color:#e6a817">${init}</span>`;
+      prefixText   = 'You think';
+    } else {
+      const col    = authorColour(author);
+      borderColour = col;
+      const init   = (author || '?')[0].toUpperCase();
+      avatarHtml   = `<span class="ss-card-avatar ss-card-avatar-init" style="background:${col}26;color:${col}">${init}</span>`;
+      prefixText   = escHtml(author) + ' thinks';
+    }
+
+    const strengthDisplay = isVerbStrength(sRaw) ? `you ${sLower}` : `you are ${sLower}`;
+
+    return `<div class="ss-card-tile-front" style="border-color:${borderColour}">
+      ${avatarHtml}
+      <div class="ss-card-prefix">${prefixText}</div>
+      <div class="ss-card-strength">${escHtml(strengthDisplay)}</div>
+    </div>`;
+  }
+
   function startPoll(fn, ms = 5000) {
     stopPoll();
     state.pollTimer = setInterval(fn, ms);
@@ -2784,10 +2842,10 @@
       const tile = el('div', 'ss-card-tile');
       if (pos.is_matched) {
         tile.classList.add('matched');
-        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+        tile.innerHTML = buildCardFront(pos.content);
       } else if (pos.is_face_up) {
         tile.classList.add('face-up');
-        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+        tile.innerHTML = buildCardFront(pos.content);
       } else {
         tile.innerHTML = `<div class="ss-card-tile-back"><span class="ss-ct-back-icon">⭐</span></div>`;
         if (isMyTurn) {
@@ -3490,7 +3548,8 @@
     inner.appendChild(grid);
     renderDemoSelfList(grid);
 
-    const submitBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full', '🤖 Let Steve Analyse →');
+    const submitBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full');
+    submitBtn.innerHTML = steveAvatarImg('ss-btn-avatar', 20) + ' Let Steve Analyse →';
     submitBtn.style.marginTop = '16px';
     submitBtn.id = 'ss-demo-self-submit';
     if (state.draftSelf.length < required) submitBtn.disabled = true;
@@ -3592,9 +3651,7 @@
       ${avatarHtml}
       <h2 style="color:#fff;margin:0 0 12px;font-size:20px;">Steve is thinking…</h2>
       <div id="ss-steve-msg" style="color:var(--ss-text-dim);font-size:14px;min-height:22px;">${messages[0]}</div>
-      <div class="ss-waiting" style="justify-content:center;margin-top:24px;">
-        <div class="ss-dots"><span></span><span></span><span></span></div>
-      </div>
+      <div class="ss-steve-spinner"></div>
     `;
     body.appendChild(inner);
     render(body);
@@ -3664,7 +3721,7 @@
     const body = el('div', 'ss-screen-body');
 
     const header = el('div', 'ss-game-header');
-    header.innerHTML = '<div class="ss-game-title">🤖 Steve\'s Demo</div>';
+    header.innerHTML = '<div class="ss-game-title">' + (steveAvatarImg('ss-header-avatar', 28) || '🤖') + ' Steve\'s Demo</div>';
     body.appendChild(header);
 
     const matchedPairs = positions.filter(p => p.is_matched).length / 2;
@@ -3700,11 +3757,10 @@
       const tile = el('div', 'ss-card-tile');
       if (pos.is_matched) {
         tile.classList.add('matched');
-        const steveCls = pos.content && pos.content.card_type === 'steve_pick' ? ' ss-ct-steve' : '';
-        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label${steveCls}">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+        tile.innerHTML = buildCardFront(pos.content);
       } else if (pos.is_face_up) {
         tile.classList.add('face-up');
-        tile.innerHTML = `<div class="ss-card-tile-front"><div class="ss-ct-label">${escHtml(pos.content ? pos.content.label : '')}</div></div>`;
+        tile.innerHTML = buildCardFront(pos.content);
       } else {
         tile.innerHTML = `<div class="ss-card-tile-back"><span class="ss-ct-back-icon">⭐</span></div>`;
         tile.classList.add('flippable');
@@ -3754,13 +3810,13 @@
         if (res.game_complete) {
           stopHeartbeat();
           state.gameStatus = 'complete';
-          if (isSteveMatch && res.rationale) await showDemoRationale(res.rationale, res.source_activity);
+          if (isSteveMatch) await showDemoRationale(res.matched_pair[0].strength_text, res.source_activity);
           else await showMatchMoment(res.matched_pair, false);
           renderDemoGameOver();
           return;
         }
 
-        if (isSteveMatch && res.rationale) await showDemoRationale(res.rationale, res.source_activity);
+        if (isSteveMatch) await showDemoRationale(res.matched_pair[0].strength_text, res.source_activity);
         else await showMatchMoment(res.matched_pair, false);
         renderDemoBoardUI(state.board);
       } else {
@@ -3788,12 +3844,14 @@
       const avatarHtml = cfg.steveAvatarUrl
         ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-demo-rationale-avatar">`
         : `<span class="ss-demo-rationale-icon-emoji">🤖</span>`;
+      const strengthDisplay = isVerbStrength(rationale || '') ? `you ${(rationale||'').toLowerCase()}` : `you are ${(rationale||'').toLowerCase()}`;
       overlay.innerHTML = `
         <div class="ss-demo-rationale-box">
           <div class="ss-demo-rationale-icon">${avatarHtml}</div>
           <div class="ss-demo-rationale-title">Steve's Pick!</div>
           <div class="ss-demo-rationale-source">${escHtml(sourceLabel)}</div>
-          <div class="ss-demo-rationale-text">${escHtml(rationale || '')}</div>
+          <div class="ss-demo-rationale-subtitle">Steve thinks</div>
+          <div class="ss-demo-rationale-strength">${escHtml(strengthDisplay)}</div>
           <button class="ss-btn ss-btn-demo ss-btn-sm ss-demo-rationale-ok">Got it ✓</button>
         </div>
       `;
@@ -3813,7 +3871,7 @@
 
     const body   = el('div', 'ss-screen-body');
     const header = el('div', 'ss-game-header');
-    header.innerHTML = '<div class="ss-game-title">🤖 Demo Complete!</div>';
+    header.innerHTML = '<div class="ss-game-title">' + (steveAvatarImg('ss-header-avatar', 28) || '🤖') + ' Demo Complete!</div>';
     body.appendChild(header);
 
     const inner = el('div', '');
@@ -3880,7 +3938,7 @@
     compareGrid.appendChild(selfCol);
 
     const steveCol = el('div', 'ss-demo-compare-col ss-demo-compare-col-steve');
-    steveCol.innerHTML = '<div class="ss-demo-compare-heading">🤖 Steve picked</div>';
+    steveCol.innerHTML = '<div class="ss-demo-compare-heading">' + (steveAvatarImg('ss-inline-avatar', 18) || '🤖') + ' Steve picked</div>';
     (data.picks || []).forEach(p => steveCol.appendChild(el('div', 'ss-strength-chip ss-chip-steve', p.strength_text || p)));
     compareGrid.appendChild(steveCol);
     compareCard.appendChild(compareGrid);
@@ -3908,7 +3966,7 @@
     if (Object.keys(sections).length) {
       const aiCard = el('div', 'ss-card');
       aiCard.style.margin = '0 16px 16px';
-      aiCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;">🤖 Steve says…</div>';
+      aiCard.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;">' + (steveAvatarImg('ss-inline-avatar', 18) || '🤖') + ' Steve says…</div>';
       aiCard.appendChild(renderAISectionTabs(sections));
       inner.appendChild(aiCard);
     }

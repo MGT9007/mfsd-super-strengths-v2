@@ -1374,11 +1374,44 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   background: var(--ss-surface);
   border: 2px solid var(--ss-purple-lt);
   border-radius: 10px;
-  padding: 8px 6px;
+  padding: 8px 6px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  box-sizing: border-box;
+}
+.ss-card-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+.ss-card-avatar-init {
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
 }
+.ss-card-prefix {
+  font-size: 10px;
+  color: var(--ss-text-dim);
+  text-align: center;
+  line-height: 1.2;
+}
+.ss-card-strength {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  line-height: 1.3;
+  word-break: break-word;
+}
+/* Legacy label class kept for any remaining uses */
 .ss-ct-label {
   font-size: 10px;
   color: var(--ss-text);
@@ -1854,6 +1887,8 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 }
 .ss-demo-rationale-icon { font-size: 40px; margin-bottom: 8px; }
 .ss-demo-rationale-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.ss-demo-rationale-subtitle { font-size: 12px; color: var(--ss-text-dim); margin-bottom: 4px; }
+.ss-demo-rationale-strength { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 20px; line-height: 1.3; }
 .ss-demo-rationale-title { font-size: 18px; font-weight: 700; color: var(--ss-gold); margin-bottom: 6px; }
 .ss-demo-rationale-source {
   display: inline-block;
@@ -1874,7 +1909,24 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   margin-bottom: 20px;
 }
 
-/* Steve-pick card label on board */
+/* Steve Thinking spinner (MYF-216) */
+.ss-steve-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(0,212,255,0.15);
+  border-top-color: #00D4FF;
+  border-radius: 50%;
+  animation: ss-spin 0.8s linear infinite;
+  margin: 16px auto 0;
+}
+@keyframes ss-spin { to { transform: rotate(360deg); } }
+
+/* Inline avatar in headings/buttons */
+.ss-inline-avatar { border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; }
+.ss-header-avatar { border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; }
+.ss-btn-avatar    { border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; }
+
+/* Steve-pick card label on board (legacy) */
 .ss-ct-steve { color: var(--ss-gold-lt); }
 
 /* ---- Summary compare grid ---- */
