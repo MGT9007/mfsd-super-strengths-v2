@@ -1100,7 +1100,7 @@ class MFSD_SS_API {
 
         $game = $wpdb->get_row($wpdb->prepare(
             "SELECT g.* FROM $smg g JOIN $smp p ON p.game_id = g.id
-             WHERE p.user_id = %d AND g.status != 'complete'
+             WHERE p.user_id = %d AND g.status != 'complete' AND g.game_type != 'demo'
              ORDER BY g.created_at DESC LIMIT 1",
             $uid
         ), ARRAY_A);
@@ -1109,7 +1109,7 @@ class MFSD_SS_API {
             // Check for a completed game to show summary
             $completed = $wpdb->get_row($wpdb->prepare(
                 "SELECT g.* FROM $smg g JOIN $smp p ON p.game_id = g.id
-                 WHERE p.user_id = %d AND g.status = 'complete'
+                 WHERE p.user_id = %d AND g.status = 'complete' AND g.game_type != 'demo'
                  ORDER BY g.created_at DESC LIMIT 1",
                 $uid
             ), ARRAY_A);

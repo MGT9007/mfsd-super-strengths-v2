@@ -94,6 +94,16 @@
     return VERB_STRENGTH_STARTS.some(v => l.startsWith(v));
   }
 
+  function getMatchLabel(card) {
+    const type = card.card_type || '';
+    const sRaw = card.strength_text || '';
+    const sLower = sRaw.toLowerCase();
+    const strengthDisplay = isVerbStrength(sRaw) ? `you ${sLower}` : `you are ${sLower}`;
+    if (type === 'steve_pick') return `Steve thinks ${strengthDisplay}`;
+    if (type === 'self_strength') return `You believe ${strengthDisplay}`;
+    return `${escHtml(card.author_display || '')} thinks ${strengthDisplay}`;
+  }
+
   const _parentColours = ['#9333EA', '#22c55e', '#f97316', '#ec4899'];
   const _authorColourMap = {};
   let   _authorColourIdx = 0;
@@ -2970,7 +2980,7 @@
   function showMatchMoment(matchedPair, isSelfStrengthMatch) {
     return new Promise(resolve => {
       const icon    = isSelfStrengthMatch ? '✨' : '🎉';
-      const label   = matchedPair && matchedPair[0] ? escHtml(matchedPair[0].label) : '';
+      const label   = matchedPair && matchedPair[0] ? getMatchLabel(matchedPair[0]) : '';
       const overlay = el('div', 'ss-match-flash');
       overlay.innerHTML = `
         <div class="ss-match-flash-inner">
