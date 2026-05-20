@@ -541,7 +541,7 @@
     const input    = el('textarea', 'ss-chat-input');
     input.placeholder = 'Ask me anything…';
     input.rows = 1;
-    const sendBtn = el('button', 'ss-chat-send-btn', '➤');
+    const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
 
     const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
     const nonce   = (window.stevegpt || {}).nonce   || '';

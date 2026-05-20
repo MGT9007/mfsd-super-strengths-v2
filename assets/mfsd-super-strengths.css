@@ -1667,7 +1667,7 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   align-items: center;
   gap: 10px;
   padding: 11px 14px;
-  background: rgba(201,168,76,0.08);
+  background: var(--ss-card);
   border-bottom: 1px solid var(--ss-border);
 }
 .ss-chat-avatar-text { font-size: 20px; }
@@ -1713,6 +1713,10 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 }
 .ss-chat-msg.typing-dots .ss-dots span:nth-child(2) { animation-delay: 0.2s; }
 .ss-chat-msg.typing-dots .ss-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ss-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.5; }
+  30%           { transform: translateY(-6px); opacity: 1;   }
+}
 .ss-chat-msg-row {
   display: flex;
   align-items: flex-end;
@@ -1750,16 +1754,17 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 .ss-chat-input:focus { border-color: var(--ss-gold); }
 .ss-chat-send-btn {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  align-self: flex-end;
+  height: 40px;
+  padding: 0 18px;
   background: var(--ss-gold);
   color: var(--ss-bg);
   border: none;
-  border-radius: 50%;
+  border-radius: 20px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
   transition: opacity 0.15s;
 }
 .ss-chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
