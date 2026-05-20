@@ -1713,8 +1713,21 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 }
 .ss-chat-msg.typing-dots .ss-dots span:nth-child(2) { animation-delay: 0.2s; }
 .ss-chat-msg.typing-dots .ss-dots span:nth-child(3) { animation-delay: 0.4s; }
+.ss-chat-msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.ss-chat-msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
 .ss-chat-input-row {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--ss-border);
@@ -1736,15 +1749,17 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 }
 .ss-chat-input:focus { border-color: var(--ss-gold); }
 .ss-chat-send-btn {
-  padding: 8px 14px;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   background: var(--ss-gold);
   color: var(--ss-bg);
   border: none;
-  border-radius: 20px;
+  border-radius: 50%;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  white-space: nowrap;
   transition: opacity 0.15s;
 }
 .ss-chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }

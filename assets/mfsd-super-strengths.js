@@ -219,7 +219,6 @@
   // NO GAME — smart screen based on viewer_role returned by state
   // =========================================================================
   function renderNoGame(data) {
-    console.log('[SS-DEBUG] renderNoGame — viewer_role:', data.viewer_role, '| can_start:', data.can_start, '| demoModeEnabled:', cfg.demoModeEnabled);
     const body = el('div', 'ss-screen-body');
     const isStudentViewer = data.viewer_role === 'student' || data.viewer_role === 'unknown';
 
@@ -490,10 +489,39 @@
       : '<span class="ss-chat-avatar-text">🤖</span><span class="ss-chat-name">Steve</span>';
     widget.appendChild(chatHeader);
 
+    // Wrap each Steve message in a row with his avatar beside it
+    function makeAiRow(text) {
+      const row = el('div', 'ss-chat-msg-row');
+      if (cfg.steveAvatarUrl) {
+        const img = document.createElement('img');
+        img.src       = cfg.steveAvatarUrl;
+        img.alt       = 'Steve';
+        img.className = 'ss-chat-msg-avatar';
+        row.appendChild(img);
+      }
+      const bubble = el('div', 'ss-chat-msg ai');
+      bubble.textContent = text;
+      row.appendChild(bubble);
+      return row;
+    }
+
+    function makeTypingRow() {
+      const row = el('div', 'ss-chat-msg-row');
+      if (cfg.steveAvatarUrl) {
+        const img = document.createElement('img');
+        img.src       = cfg.steveAvatarUrl;
+        img.alt       = 'Steve';
+        img.className = 'ss-chat-msg-avatar';
+        row.appendChild(img);
+      }
+      const bubble = html('div', 'ss-chat-msg ai typing-dots',
+        '<div class="ss-dots"><span></span><span></span><span></span></div>');
+      row.appendChild(bubble);
+      return row;
+    }
+
     const msgs = el('div', 'ss-chat-messages');
-    const greeting = el('div', 'ss-chat-msg ai');
-    greeting.textContent = 'Hi! Ask me anything about the game — I\'m here to help before you get started.';
-    msgs.appendChild(greeting);
+    msgs.appendChild(makeAiRow('Hi! Ask me anything about the game — I\'m here to help before you get started.'));
 
     const chips = [
       'What if my family haven\'t written cards yet?',
@@ -513,10 +541,23 @@
     const input    = el('textarea', 'ss-chat-input');
     input.placeholder = 'Ask me anything…';
     input.rows = 1;
-    const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
+    const sendBtn = el('button', 'ss-chat-send-btn', '➤');
 
     const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
     const nonce   = (window.stevegpt || {}).nonce   || '';
+
+    // Build game context once; prepend to the first message so Steve knows the mode
+    let contextPrefix = '';
+    {
+      const mode     = cfg.demoModeEnabled ? 'demo' : 'family';
+      const timeSecs = (cfg.demoTimeLimitMins || 3) * 60;
+      contextPrefix  = `STUDENT CONTEXT:\nName: ${cfg.displayName}\nAge: ${cfg.playerAge || 'unknown'}\n\nGAME CONTEXT:\nMode: ${mode}\n`;
+      if (cfg.demoModeEnabled) {
+        contextPrefix += `Time limit: ${timeSecs} seconds\nBoard: 20 tiles (5 student picks + 5 Steve picks, each duplicated into pairs)\n`;
+      }
+      contextPrefix += '\nQuestion: ';
+    }
+    let contextAttached = false;
 
     async function sendWelcomeMsg(msg) {
       if (!msg || sendBtn.disabled) return;
@@ -528,9 +569,11 @@
       userMsg.textContent = msg;
       msgs.appendChild(userMsg);
 
-      const typing = html('div', 'ss-chat-msg ai typing-dots',
-        '<div class="ss-dots"><span></span><span></span><span></span></div>');
-      msgs.appendChild(typing);
+      // Prepend context to first message only — shown cleanly in UI, sent with context to AI
+      const serverMsg = contextAttached ? msg : (contextAttached = true, contextPrefix + msg);
+
+      const typingRow = makeTypingRow();
+      msgs.appendChild(typingRow);
       msgs.scrollTop = msgs.scrollHeight;
 
       try {
@@ -542,19 +585,15 @@
             action:     'stevegpt_send_message',
             nonce,
             chatbot_id: cfg.welcomeChatChatbotId,
-            message:    msg,
+            message:    serverMsg,
           }),
         });
         const json = await res.json();
-        typing.remove();
-        const aiMsg = el('div', 'ss-chat-msg ai');
-        aiMsg.textContent = json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.';
-        msgs.appendChild(aiMsg);
+        typingRow.remove();
+        msgs.appendChild(makeAiRow(json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.'));
       } catch (_) {
-        typing.remove();
-        const errMsg = el('div', 'ss-chat-msg ai');
-        errMsg.textContent = 'Connection error. Please try again.';
-        msgs.appendChild(errMsg);
+        typingRow.remove();
+        msgs.appendChild(makeAiRow('Connection error. Please try again.'));
       }
       sendBtn.disabled = false;
       msgs.scrollTop = msgs.scrollHeight;
