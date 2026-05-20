@@ -131,6 +131,50 @@ if (isset($_POST['ss_reset_game']) && check_admin_referer('mfsd_ss_reset')) {
     }
 }
 
+// ── Reset v5 memory / demo game ───────────────────────────────────────────────
+if (isset($_POST['ss_reset_sm_game']) && check_admin_referer('mfsd_ss_reset_sm')) {
+    $gid = (int)($_POST['reset_sm_game_id'] ?? 0);
+    if ($gid) {
+        $smg  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $smp  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+        $smss = $wpdb->prefix . MFSD_SS_DB::TBL_SM_SELF_STRENGTHS;
+        $smc  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_CARDS;
+        $smb  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_BOARD;
+        $smt  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_TURNS;
+        $smsu = $wpdb->prefix . MFSD_SS_DB::TBL_SM_SUMMARIES;
+        $smdr = $wpdb->prefix . MFSD_SS_DB::TBL_SM_DEMO_RATIONALE;
+
+        $game_row   = $wpdb->get_row($wpdb->prepare("SELECT student_user_id, game_type FROM $smg WHERE id = %d", $gid), ARRAY_A);
+        $student_id = $game_row ? (int)$game_row['student_user_id'] : 0;
+
+        $wpdb->query($wpdb->prepare("DELETE FROM $smdr WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $smsu WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $smt  WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $smb  WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $smc  WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $smss WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $smp  WHERE game_id = %d", $gid));
+        $wpdb->query($wpdb->prepare("DELETE FROM $smg  WHERE id = %d", $gid));
+
+        if ($student_id && function_exists('mfsd_set_task_status')) {
+            mfsd_set_task_status($student_id, 'super_strengths', 'available');
+        }
+
+        // Remove all SS badges for this student (testing/support reset)
+        if ($student_id) {
+            $badge_table = $wpdb->prefix . 'mfsd_badges';
+            if ($wpdb->get_var("SHOW TABLES LIKE '$badge_table'") === $badge_table) {
+                $wpdb->query($wpdb->prepare(
+                    "DELETE FROM $badge_table WHERE student_id = %d AND (badge_slug LIKE %s OR badge_slug = %s)",
+                    $student_id, 'badge_ss_%', 'badge_super_strengths'
+                ));
+            }
+        }
+
+        $notice = ['success', "Game #{$gid} fully deleted. Task status reset to 'available'" . ($student_id ? " for user #{$student_id}" : '') . '. SS badges removed.'];
+    }
+}
+
 // ── Delete game (complete games only) ─────────────────────────────────────────
 if (isset($_POST['ss_delete_game']) && check_admin_referer('mfsd_ss_delete_game')) {
     $gid = (int)($_POST['delete_game_id'] ?? 0);
@@ -265,6 +309,16 @@ $games = $wpdb->get_results(
      LIMIT 20",
     ARRAY_A
 );
+
+$smg_tbl  = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+$sm_games = $wpdb->get_results(
+    "SELECT g.*, u.display_name
+     FROM {$smg_tbl} g
+     LEFT JOIN {$wpdb->users} u ON u.ID = g.student_user_id
+     ORDER BY g.created_at DESC
+     LIMIT 50",
+    ARRAY_A
+) ?: [];
 
 $categories = [
     'Character','Social & Caring','Creative & Expressive','Mind & Learning',
@@ -517,121 +571,115 @@ $pending_flags = count($flags);
     <div id="ss-tab-games" class="ss-tab-content">
         <h2>Games</h2>
 
-        <div class="ss-info-box">
-            <strong>How to set up a game:</strong>
-            1. Create a game below → 2. Add each family member by their WordPress user ID → 3. Share the page with the
-            <code>[mfsd_super_strengths]</code> shortcode so they can log in and submit cards.
-        </div>
-
-        <!-- Create game -->
-        <h3>Create New Game</h3>
-        <form method="post" style="background:#f9f9f9;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:24px;">
-            <?php wp_nonce_field('mfsd_ss_create_game'); ?>
-            <input type="hidden" name="ss_create_game" value="1">
-            <table class="form-table"><tbody>
-                <tr>
-                    <th>Mode</th>
-                    <td>
-                        <select name="new_game_mode">
-                            <option value="full">Full (Phase A + B)</option>
-                            <option value="short">Short (Phase A only)</option>
-                        </select>
-                    </td>
-                </tr>
-                <tr>
-                    <th>Round limit (5–6 players)</th>
-                    <td><input type="number" name="new_round_limit" value="<?php echo (int) get_option('mfsd_ss_round_limit',3); ?>" min="1" max="25" class="small-text"></td>
-                </tr>
-            </tbody></table>
-            <p><input type="submit" class="button-primary" value="+ Create Game"></p>
-        </form>
-
-        <!-- Add player -->
-        <h3>Add Player to Game</h3>
-        <form method="post" style="background:#f9f9f9;border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:24px;">
-            <?php wp_nonce_field('mfsd_ss_add_player'); ?>
-            <input type="hidden" name="ss_add_player" value="1">
-            <table class="form-table"><tbody>
-                <tr>
-                    <th>Game ID</th>
-                    <td><input type="number" name="player_game_id" class="small-text" placeholder="e.g. 1"></td>
-                </tr>
-                <tr>
-                    <th>WordPress User ID</th>
-                    <td><input type="number" name="player_user_id" class="small-text" placeholder="e.g. 42"></td>
-                </tr>
-                <tr>
-                    <th>Role</th>
-                    <td>
-                        <select name="player_role">
-                            <option value="student">Student</option>
-                            <option value="parent">Parent</option>
-                            <option value="carer">Carer</option>
-                            <option value="sibling">Sibling</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </td>
-                </tr>
-            </tbody></table>
-            <p><input type="submit" class="button-primary" value="Add Player"></p>
-        </form>
-
-        <!-- Game list -->
-        <h3>Recent Games</h3>
-        <?php if (empty($games)): ?>
-            <p>No games yet.</p>
+        <!-- ── v5 Memory & Demo Games ── -->
+        <h3>Memory &amp; Demo Games (v5)</h3>
+        <?php
+        $sm_status_colors = [
+            'submission_self'   => 'submission',
+            'submission_others' => 'submission',
+            'dealing'           => 'flag',
+            'playing'           => 'playing',
+            'complete'          => 'complete',
+        ];
+        ?>
+        <?php if (empty($sm_games)): ?>
+            <p>No v5 games yet.</p>
         <?php else: ?>
-            <?php foreach ($games as $g):
-                $players_in_game = $wpdb->get_results($wpdb->prepare(
-                    "SELECT display_name, role, submission_status, score_total FROM $pp WHERE game_id = %d ORDER BY turn_order ASC, id ASC",
-                    $g['id']
-                ), ARRAY_A);
-            ?>
-            <div class="ss-game-card">
-                <h4>
-                    Game #<?php echo $g['id']; ?>
-                    <span class="ss-badge ss-badge-<?php echo esc_attr($g['status']); ?>"><?php echo esc_html($g['status']); ?></span>
-                    <span style="font-weight:400;font-size:13px;margin-left:8px;"><?php echo esc_html($g['mode']); ?> mode · R=<?php echo (int)$g['round_limit']; ?></span>
-                </h4>
-                <div class="meta">
-                    Created <?php echo esc_html($g['created_at']); ?> ·
-                    <?php echo (int)$g['player_count']; ?> players ·
-                    <?php echo (int)$g['submitted_count']; ?>/<?php echo (int)$g['player_count']; ?> submitted
-                </div>
-
-                <?php if (!empty($players_in_game)): ?>
-                <table class="ss-table" style="margin-top:10px;max-width:600px;">
-                    <tr><th>Player</th><th>Role</th><th>Submitted</th><th>Score</th></tr>
-                    <?php foreach ($players_in_game as $pl): ?>
-                    <tr>
-                        <td><?php echo esc_html($pl['display_name']); ?></td>
-                        <td><?php echo esc_html($pl['role']); ?></td>
-                        <td><?php echo $pl['submission_status'] === 'submitted' ? '✅' : '⏳'; ?></td>
-                        <td><?php echo (int)$pl['score_total']; ?> pts</td>
-                    </tr>
-                    <?php endforeach; ?>
-                </table>
-                <?php endif; ?>
-
-                <?php if ($g['status'] !== 'complete'): ?>
-                <form method="post" style="margin-top:10px;">
-                    <?php wp_nonce_field('mfsd_ss_reset'); ?>
-                    <input type="hidden" name="ss_reset_game" value="1">
-                    <input type="hidden" name="reset_game_id" value="<?php echo $g['id']; ?>">
-                    <input type="submit" class="button button-small" value="↺ Reset game"
-                           onclick="return confirm('Reset game #<?php echo $g['id']; ?>? This deletes all cards, turns and votes.')">
-                </form>
-                <?php endif; ?>
-                <form method="post" style="margin-top:6px;">
-                    <?php wp_nonce_field('mfsd_ss_delete_game'); ?>
-                    <input type="hidden" name="ss_delete_game" value="1">
-                    <input type="hidden" name="delete_game_id" value="<?php echo $g['id']; ?>">
-                    <input type="submit" class="button button-small delete-link" value="🗑 Delete game"
-                           onclick="return confirm('Permanently delete game #<?php echo $g['id']; ?> and ALL its data? This cannot be undone.')">
-                </form>
-            </div>
+        <table class="ss-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Student</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Mode</th>
+                    <th>Started</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($sm_games as $g): ?>
+                <?php
+                $status_key = $sm_status_colors[$g['status']] ?? 'inactive';
+                $type_label = $g['game_type'] === 'demo' ? '🤖 Demo' : '🃏 Family';
+                $started    = $g['game_started_at'] ?? $g['created_at'] ?? '—';
+                ?>
+                <tr>
+                    <td><strong>#<?php echo (int)$g['id']; ?></strong><br><span style="font-size:11px;color:#666;"><?php echo esc_html(substr($g['game_key'] ?? '', 0, 20)); ?></span></td>
+                    <td><?php echo esc_html($g['display_name'] ?? 'User #' . $g['student_user_id']); ?><br><span style="font-size:11px;color:#666;">uid:<?php echo (int)$g['student_user_id']; ?></span></td>
+                    <td><?php echo $type_label; ?></td>
+                    <td><span class="ss-badge ss-badge-<?php echo esc_attr($status_key); ?>"><?php echo esc_html($g['status']); ?></span></td>
+                    <td><?php echo esc_html($g['memory_mode'] ?? '—'); ?></td>
+                    <td style="font-size:12px;"><?php echo esc_html(substr($started, 0, 16)); ?></td>
+                    <td>
+                        <form method="post" style="display:inline;">
+                            <?php wp_nonce_field('mfsd_ss_reset_sm'); ?>
+                            <input type="hidden" name="ss_reset_sm_game" value="1">
+                            <input type="hidden" name="reset_sm_game_id" value="<?php echo (int)$g['id']; ?>">
+                            <input type="submit" class="button button-small"
+                                   style="color:#b91c1c;border-color:#b91c1c;"
+                                   value="↺ Reset"
+                                   onclick="return confirm('Delete ALL data for game #<?php echo (int)$g['id']; ?>?\n\nThis will:\n• Delete the game, board, turns, summaries\n• Reset the student\'s Super Strengths task to available\n• Remove all Super Strengths badges\n\nThis cannot be undone.')">
+                        </form>
+                    </td>
+                </tr>
             <?php endforeach; ?>
+            </tbody>
+        </table>
         <?php endif; ?>
+
+        <!-- ── Legacy v4 Games (collapsed) ── -->
+        <details style="margin-top:32px;border:1px solid #ddd;border-radius:6px;padding:0;">
+            <summary style="padding:12px 16px;cursor:pointer;font-weight:600;font-size:14px;background:#f9f9f9;border-radius:6px;">
+                📦 Legacy v4 Games (<?php echo count($games); ?> records)
+            </summary>
+            <div style="padding:16px;">
+                <p style="color:#92400e;background:#fff8e5;border:1px solid #f0c036;border-left:4px solid #f0c036;padding:10px 14px;border-radius:4px;font-size:13px;">
+                    These are v4 guessing game records. v5 memory games are shown above.
+                </p>
+                <?php if (empty($games)): ?>
+                    <p>No legacy games.</p>
+                <?php else: ?>
+                    <?php foreach ($games as $g):
+                        $players_in_game = $wpdb->get_results($wpdb->prepare(
+                            "SELECT display_name, role, submission_status, score_total FROM $pp WHERE game_id = %d ORDER BY turn_order ASC, id ASC",
+                            $g['id']
+                        ), ARRAY_A);
+                    ?>
+                    <div class="ss-game-card">
+                        <h4>
+                            Game #<?php echo $g['id']; ?>
+                            <span class="ss-badge ss-badge-<?php echo esc_attr($g['status']); ?>"><?php echo esc_html($g['status']); ?></span>
+                            <span style="font-weight:400;font-size:13px;margin-left:8px;"><?php echo esc_html($g['mode']); ?> mode</span>
+                        </h4>
+                        <div class="meta">Created <?php echo esc_html($g['created_at']); ?> · <?php echo (int)$g['player_count']; ?> players</div>
+
+                        <?php if (!empty($players_in_game)): ?>
+                        <table class="ss-table" style="margin-top:10px;max-width:560px;">
+                            <tr><th>Player</th><th>Role</th><th>Submitted</th><th>Score</th></tr>
+                            <?php foreach ($players_in_game as $pl): ?>
+                            <tr>
+                                <td><?php echo esc_html($pl['display_name']); ?></td>
+                                <td><?php echo esc_html($pl['role']); ?></td>
+                                <td><?php echo $pl['submission_status'] === 'submitted' ? '✅' : '⏳'; ?></td>
+                                <td><?php echo (int)$pl['score_total']; ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </table>
+                        <?php endif; ?>
+
+                        <form method="post" style="margin-top:8px;display:inline-block;">
+                            <?php wp_nonce_field('mfsd_ss_delete_game'); ?>
+                            <input type="hidden" name="ss_delete_game" value="1">
+                            <input type="hidden" name="delete_game_id" value="<?php echo $g['id']; ?>">
+                            <input type="submit" class="button button-small" value="🗑 Delete"
+                                   onclick="return confirm('Permanently delete legacy game #<?php echo $g['id']; ?>?')">
+                        </form>
+                    </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </details>
     </div>
 
     <!-- ===================================================================
