@@ -496,14 +496,15 @@ class MFSD_SS_Demo {
             }
 
             return [
-                'ok'            => true,
-                'flip_number'   => 2,
-                'position'      => $position,
-                'is_match'      => true,
-                'matched_pair'  => [self::card_content($flip1_card), self::card_content($card)],
-                'new_score'     => $new_score,
-                'rationale'     => $rationale,
-                'game_complete' => $game_complete,
+                'ok'             => true,
+                'flip_number'    => 2,
+                'position'       => $position,
+                'is_match'       => true,
+                'matched_pair'   => [self::card_content($flip1_card), self::card_content($card)],
+                'new_score'      => $new_score,
+                'rationale'      => $rationale ? $rationale['text']            : null,
+                'source_activity'=> $rationale ? $rationale['source_activity'] : null,
+                'game_complete'  => $game_complete,
             ];
         }
 

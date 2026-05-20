@@ -3785,9 +3785,12 @@
       }[sourceActivity] || String(sourceActivity || 'Steve');
 
       const overlay = el('div', 'ss-demo-rationale-overlay');
+      const avatarHtml = cfg.steveAvatarUrl
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-demo-rationale-avatar">`
+        : `<span class="ss-demo-rationale-icon-emoji">🤖</span>`;
       overlay.innerHTML = `
         <div class="ss-demo-rationale-box">
-          <div class="ss-demo-rationale-icon">🤖</div>
+          <div class="ss-demo-rationale-icon">${avatarHtml}</div>
           <div class="ss-demo-rationale-title">Steve's Pick!</div>
           <div class="ss-demo-rationale-source">${escHtml(sourceLabel)}</div>
           <div class="ss-demo-rationale-text">${escHtml(rationale || '')}</div>

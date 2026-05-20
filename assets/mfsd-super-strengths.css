@@ -1853,6 +1853,7 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   text-align: center;
 }
 .ss-demo-rationale-icon { font-size: 40px; margin-bottom: 8px; }
+.ss-demo-rationale-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
 .ss-demo-rationale-title { font-size: 18px; font-weight: 700; color: var(--ss-gold); margin-bottom: 6px; }
 .ss-demo-rationale-source {
   display: inline-block;
