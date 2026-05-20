@@ -1674,6 +1674,24 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 .ss-chat-avatar-text { font-size: 20px; }
 .ss-chat-avatar-img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .ss-chat-name { font-weight: 700; font-size: 16px; color: #fff; }
+.ss-chat-new-btn {
+  margin-left: auto;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+.ss-chat-new-btn:hover {
+  background: rgba(255,255,255,0.25);
+  border-color: rgba(255,255,255,0.3);
+  transform: translateY(-1px);
+}
 .ss-chat-messages {
   height: 260px;
   overflow-y: auto;

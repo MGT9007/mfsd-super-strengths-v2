@@ -487,6 +487,8 @@
     chatHeader.innerHTML = cfg.steveAvatarUrl
       ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-chat-avatar-img"><span class="ss-chat-name">Steve</span>`
       : '<span class="ss-chat-avatar-text">🤖</span><span class="ss-chat-name">Steve</span>';
+    const newChatBtn = el('button', 'ss-chat-new-btn', '🔄 New Chat');
+    chatHeader.appendChild(newChatBtn);
     widget.appendChild(chatHeader);
 
     // Wrap each Steve message in a row with his avatar beside it
@@ -558,6 +560,22 @@
       contextPrefix += '\nQuestion: ';
     }
     let contextAttached = false;
+
+    newChatBtn.onclick = () => {
+      // Clear messages back to just the greeting, reset context
+      while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
+      msgs.appendChild(makeAiRow('Hi! Ask me anything about the game — I\'m here to help before you get started.'));
+      const freshChips = el('div', 'ss-chat-chips');
+      chips.forEach(chip => {
+        const btn = el('button', 'ss-chat-chip', chip);
+        btn.onclick = () => { freshChips.remove(); sendWelcomeMsg(chip); };
+        freshChips.appendChild(btn);
+      });
+      msgs.appendChild(freshChips);
+      contextAttached = false;
+      input.value = '';
+      input.style.height = 'auto';
+    };
 
     async function sendWelcomeMsg(msg) {
       if (!msg || sendBtn.disabled) return;
