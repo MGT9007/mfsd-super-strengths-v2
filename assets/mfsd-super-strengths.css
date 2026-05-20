@@ -1741,7 +1741,7 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 }
 .ss-chat-msg-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 10px;
 }
 .ss-chat-msg-avatar {
@@ -1780,19 +1780,21 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 .ss-chat-send-btn {
   flex-shrink: 0;
   align-self: flex-end;
+  width: 44px;
   height: 44px;
-  padding: 0 20px;
-  background: var(--ss-gold);
-  color: #000;
+  padding: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
   border: none;
   border-radius: 8px;
-  font-size: 14px;
-  font-weight: 700;
   cursor: pointer;
-  white-space: nowrap;
-  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s, transform 0.2s;
 }
-.ss-chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ss-chat-send-btn:hover { transform: translateY(-2px); }
+.ss-chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .ss-chat-chips {
   display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 4px;
 }

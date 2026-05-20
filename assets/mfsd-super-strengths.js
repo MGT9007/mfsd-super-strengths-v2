@@ -543,7 +543,8 @@
     const input    = el('textarea', 'ss-chat-input');
     input.placeholder = 'Ask me anything…';
     input.rows = 1;
-    const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
+    const sendBtn = el('button', 'ss-chat-send-btn');
+    sendBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.5 10L17.5 3.33333L10.8333 17.5L8.75 11.25L2.5 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
     const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
     const nonce   = (window.stevegpt || {}).nonce   || '';
@@ -3311,7 +3312,8 @@
       const input    = el('textarea', 'ss-chat-input');
       input.placeholder = 'Ask me anything…';
       input.rows = 1;
-      const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
+      const sendBtn = el('button', 'ss-chat-send-btn');
+    sendBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.5 10L17.5 3.33333L10.8333 17.5L8.75 11.25L2.5 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
       const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
       const nonce   = (window.stevegpt || {}).nonce || '';
@@ -3944,7 +3946,8 @@
       const input    = el('textarea', 'ss-chat-input');
       input.placeholder = 'Ask me anything…';
       input.rows = 1;
-      const sendBtn = el('button', 'ss-chat-send-btn', 'Send');
+      const sendBtn = el('button', 'ss-chat-send-btn');
+    sendBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.5 10L17.5 3.33333L10.8333 17.5L8.75 11.25L2.5 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
       const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
       const nonce   = (window.stevegpt || {}).nonce   || '';
