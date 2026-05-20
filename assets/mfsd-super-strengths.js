@@ -23,6 +23,7 @@
     currentTurnPlayerId:  null,   // player.id of whoever has the current turn
     gameEndsAt:           null,   // ISO datetime string (timed mode only)
     heartbeatTimer:       null,   // setInterval reference
+    demoTimerInterval:    null,   // demo countdown — tracked so re-renders don't leak intervals
     pendingFlipPos:       null,   // position of flip 1 while awaiting flip 2
     winnerPlayerId:       null,   // set when game_complete
     // Legacy guessing game
@@ -3727,6 +3728,7 @@
   }
 
   function renderDemoBoardUI(positions) {
+    if (state.demoTimerInterval) { clearInterval(state.demoTimerInterval); state.demoTimerInterval = null; }
     const body = el('div', 'ss-screen-body');
 
     const header = el('div', 'ss-game-header');
@@ -3750,7 +3752,8 @@
         const s    = (secs % 60).toString().padStart(2, '0');
         timerEl.textContent = '⏱ ' + m + ':' + s;
         if (secs === 0) {
-          clearInterval(timerEl._clockInterval);
+          clearInterval(state.demoTimerInterval);
+          state.demoTimerInterval = null;
           boardGrid.querySelectorAll('.ss-card-tile').forEach(t => t.style.pointerEvents = 'none');
           stopHeartbeat();
           state.gameStatus = 'complete';
@@ -3759,7 +3762,8 @@
         }
       };
       updateTimer();
-      timerEl._clockInterval = setInterval(updateTimer, 1000);
+      state.demoTimerInterval = setInterval(updateTimer, 1000);
+      timerEl._clockInterval  = state.demoTimerInterval;
       body.appendChild(timerEl);
     }
 
@@ -3879,6 +3883,7 @@
 
   function renderDemoGameOver() {
     stopPoll(); stopHeartbeat();
+    if (state.demoTimerInterval) { clearInterval(state.demoTimerInterval); state.demoTimerInterval = null; }
     const matchedPairs = state.board.filter(p => p.is_matched).length / 2;
     const totalPairs   = state.board.length / 2;
     const perfect      = matchedPairs >= totalPairs && totalPairs > 0;
