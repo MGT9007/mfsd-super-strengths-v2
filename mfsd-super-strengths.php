@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
- * Version: 5.1.0
+ * Version: 5.1.1
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '5.1.0');
+define('MFSD_SS_VERSION', '5.1.1');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -117,20 +117,20 @@ final class MFSD_Super_Strengths {
             }
         }
 
-        // Build welcome chat context server-side (same pattern as Who Am I)
+        // Build welcome chat context — game-specific info only.
+        // Name and age come from SteveGPT's own student context (content_aware), sourced
+        // from DOB meta. We must NOT duplicate those fields here or we risk sending a
+        // stale/zero mfsd_age value that conflicts with the student context age.
         $demo_enabled  = get_option('mfsd_ss_demo_mode_enabled', '0') === '1';
         $game_mode_str = $demo_enabled ? 'demo' : get_option('mfsd_ss_mode', 'full');
-        $age_str       = $age > 0 ? (string) $age : 'unknown';
         $ctx_parts     = [
-            "Student name: {$user->display_name}.",
-            "Student age: {$age_str}.",
+            "The student is currently playing the Super Strengths card game.",
             "Game mode: {$game_mode_str}.",
         ];
         if ($demo_enabled) {
             $demo_secs   = (int) get_option('mfsd_ss_demo_time_limit_mins', 3) * 60;
             $ctx_parts[] = "Demo time limit: {$demo_secs} seconds. Board: 20 tiles (5 student picks + 5 Steve picks, each duplicated into pairs).";
         }
-        $ctx_parts[]          = 'Use this context to personalise your responses to this student.';
         $welcome_chat_context = implode(' ', $ctx_parts);
 
         wp_localize_script('mfsd-ss-js', 'MFSD_SS_CFG', [
