@@ -229,9 +229,12 @@
     if (cfg.demoModeEnabled && isStudentViewer) {
       const inner = el('div', '');
       inner.style.padding = '28px 24px';
+      const topAvatarHtml = cfg.steveAvatarUrl
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-bottom:12px;">`
+        : `<div style="font-size:52px;margin-bottom:12px;">🤖</div>`;
       inner.innerHTML = `
         <div style="text-align:center;margin-bottom:24px;">
-          <div style="font-size:52px;margin-bottom:12px;">🤖</div>
+          ${topAvatarHtml}
           <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Super Strengths Cards</h2>
           <p style="color:var(--ss-text-dim);font-size:14px;margin:0;">Discover your strengths with Steve</p>
         </div>
@@ -482,7 +485,9 @@
     const widget = el('div', 'ss-chat-widget');
 
     const chatHeader = el('div', 'ss-chat-header');
-    chatHeader.innerHTML = '<span class="ss-chat-avatar-text">🤖</span><span class="ss-chat-name">Steve</span>';
+    chatHeader.innerHTML = cfg.steveAvatarUrl
+      ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-chat-avatar-img"><span class="ss-chat-name">Steve</span>`
+      : '<span class="ss-chat-avatar-text">🤖</span><span class="ss-chat-name">Steve</span>';
     widget.appendChild(chatHeader);
 
     const msgs = el('div', 'ss-chat-messages');

@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
- * Version: 5.0.1
+ * Version: 5.0.2
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '5.0.1');
+define('MFSD_SS_VERSION', '5.0.2');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -102,14 +102,19 @@ final class MFSD_Super_Strengths {
         elseif ($age >= 11 && $age <= 12 && get_option('mfsd_ss_free_text_11_12') === '1') $ft_enabled = true;
 
         $steve_avatar_url = '';
-        $demo_chat_id = get_option('mfsd_stevegpt_map_ss_demo_chat', '');
-        if ($demo_chat_id && class_exists('SteveGPT_Chatbot')) {
-            try {
-                $chatbot_obj   = SteveGPT_Chatbot::get($demo_chat_id);
-                $chatbot_cfg   = $chatbot_obj->get_config();
-                $chatbot_app   = $chatbot_cfg['appearance'] ?? [];
-                $steve_avatar_url = $chatbot_app['avatar_image'] ?? '';
-            } catch (\Exception $e) {}
+        if (class_exists('SteveGPT_Chatbot')) {
+            $avatar_sources = array_filter([
+                get_option('mfsd_stevegpt_map_ss_welcome_chat', ''),
+                get_option('mfsd_stevegpt_map_ss_demo_chat', ''),
+                get_option('mfsd_stevegpt_map_ss_welcome_intro', ''),
+            ]);
+            foreach ($avatar_sources as $chatbot_id) {
+                try {
+                    $chatbot_app = SteveGPT_Chatbot::get($chatbot_id)->get_config()['appearance'] ?? [];
+                    $url = $chatbot_app['avatar_image'] ?? '';
+                    if ($url) { $steve_avatar_url = $url; break; }
+                } catch (\Exception $e) {}
+            }
         }
 
         wp_localize_script('mfsd-ss-js', 'MFSD_SS_CFG', [
