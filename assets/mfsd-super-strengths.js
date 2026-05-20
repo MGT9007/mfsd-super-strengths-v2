@@ -3298,22 +3298,54 @@
       const widget = el('div', 'ss-chat-widget');
 
       const chatHeader = el('div', 'ss-chat-header');
-      chatHeader.innerHTML = '<span class="ss-chat-avatar-text">' + escHtml(config.avatar || '💬') + '</span>'
-        + '<span class="ss-chat-name">' + escHtml(config.ai_name || 'Steve') + '</span>';
+      chatHeader.innerHTML = cfg.steveAvatarUrl
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-chat-avatar-img"><span class="ss-chat-name">${escHtml(config.ai_name || 'Steve')}</span>`
+        : `<span class="ss-chat-avatar-text">💬</span><span class="ss-chat-name">${escHtml(config.ai_name || 'Steve')}</span>`;
+      const newChatBtn = el('button', 'ss-chat-new-btn', '🔄 New Chat');
+      chatHeader.appendChild(newChatBtn);
       widget.appendChild(chatHeader);
 
+      function makeAiRow(text) {
+        const row = el('div', 'ss-chat-msg-row');
+        if (cfg.steveAvatarUrl) {
+          const img = document.createElement('img');
+          img.src = cfg.steveAvatarUrl; img.alt = 'Steve'; img.className = 'ss-chat-msg-avatar';
+          row.appendChild(img);
+        }
+        const bubble = el('div', 'ss-chat-msg ai');
+        bubble.textContent = text;
+        row.appendChild(bubble);
+        return row;
+      }
+      function makeTypingRow() {
+        const row = el('div', 'ss-chat-msg-row');
+        if (cfg.steveAvatarUrl) {
+          const img = document.createElement('img');
+          img.src = cfg.steveAvatarUrl; img.alt = 'Steve'; img.className = 'ss-chat-msg-avatar';
+          row.appendChild(img);
+        }
+        row.appendChild(html('div', 'ss-chat-msg ai typing-dots',
+          '<div class="ss-dots"><span></span><span></span><span></span></div>'));
+        return row;
+      }
+
+      const greetingText = config.greeting || 'Ask me about your Super Strengths!';
       const msgs = el('div', 'ss-chat-messages');
-      const greeting = el('div', 'ss-chat-msg ai');
-      greeting.textContent = config.greeting || 'Ask me about your Super Strengths!';
-      msgs.appendChild(greeting);
+      msgs.appendChild(makeAiRow(greetingText));
       widget.appendChild(msgs);
+
+      newChatBtn.onclick = () => {
+        while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
+        msgs.appendChild(makeAiRow(greetingText));
+        input.value = ''; input.style.height = 'auto';
+      };
 
       const inputRow = el('div', 'ss-chat-input-row');
       const input    = el('textarea', 'ss-chat-input');
       input.placeholder = 'Ask me anything…';
       input.rows = 1;
       const sendBtn = el('button', 'ss-chat-send-btn');
-    sendBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.5 10L17.5 3.33333L10.8333 17.5L8.75 11.25L2.5 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      sendBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.5 10L17.5 3.33333L10.8333 17.5L8.75 11.25L2.5 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
       const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
       const nonce   = (window.stevegpt || {}).nonce || '';
@@ -3321,45 +3353,33 @@
       async function sendMessage() {
         const msg = input.value.trim();
         if (!msg || sendBtn.disabled) return;
-        input.value = '';
-        input.style.height = 'auto';
+        input.value = ''; input.style.height = 'auto';
         sendBtn.disabled = true;
-
         const userMsg = el('div', 'ss-chat-msg user');
         userMsg.textContent = msg;
         msgs.appendChild(userMsg);
-
-        const typing = html('div', 'ss-chat-msg ai typing-dots',
-          '<div class="ss-dots"><span></span><span></span><span></span></div>');
-        msgs.appendChild(typing);
+        const typingRow = makeTypingRow();
+        msgs.appendChild(typingRow);
         msgs.scrollTop = msgs.scrollHeight;
-
         try {
           const res  = await fetch(ajaxUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             credentials: 'same-origin',
             body: new URLSearchParams({
-              action:          'stevegpt_send_message',
-              nonce,
-              chatbot_id:      config.chatbot_id,
+              action: 'stevegpt_send_message', nonce,
+              chatbot_id: config.chatbot_id,
               conversation_id: config.conversation_id || '',
-              message:         msg,
-              context:         config.context || '',
+              message: msg, context: config.context || '',
             }),
           });
           const json = await res.json();
-          typing.remove();
-          const aiMsg = el('div', 'ss-chat-msg ai');
-          aiMsg.textContent = json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.';
-          msgs.appendChild(aiMsg);
+          typingRow.remove();
+          msgs.appendChild(makeAiRow(json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.'));
         } catch (_) {
-          typing.remove();
-          const errMsg = el('div', 'ss-chat-msg ai');
-          errMsg.textContent = 'Connection error. Please try again.';
-          msgs.appendChild(errMsg);
+          typingRow.remove();
+          msgs.appendChild(makeAiRow('Connection error. Please try again.'));
         }
-
         sendBtn.disabled = false;
         msgs.scrollTop = msgs.scrollHeight;
       }
@@ -3372,15 +3392,11 @@
         input.style.height = 'auto';
         input.style.height = Math.min(input.scrollHeight, 100) + 'px';
       });
-
       inputRow.appendChild(input);
       inputRow.appendChild(sendBtn);
       widget.appendChild(inputRow);
-
       placeholder.appendChild(widget);
-    } catch (_) {
-      // Chat unavailable — non-fatal, no UI needed
-    }
+    } catch (_) {}
   }
 
   // =========================================================================
@@ -3930,24 +3946,57 @@
       const config = await api('demo/chat-widget?game_id=' + state.gameId, 'GET');
       if (!config.ok || !config.chatbot_id) return;
 
-      const widget     = el('div', 'ss-chat-widget');
+      const widget = el('div', 'ss-chat-widget');
+
       const chatHeader = el('div', 'ss-chat-header');
-      chatHeader.innerHTML = '<span class="ss-chat-avatar-text">' + escHtml(config.avatar || '🤖') + '</span>'
-        + '<span class="ss-chat-name">' + escHtml(config.ai_name || 'Steve') + '</span>';
+      chatHeader.innerHTML = cfg.steveAvatarUrl
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-chat-avatar-img"><span class="ss-chat-name">${escHtml(config.ai_name || 'Steve')}</span>`
+        : `<span class="ss-chat-avatar-text">🤖</span><span class="ss-chat-name">${escHtml(config.ai_name || 'Steve')}</span>`;
+      const newChatBtn = el('button', 'ss-chat-new-btn', '🔄 New Chat');
+      chatHeader.appendChild(newChatBtn);
       widget.appendChild(chatHeader);
 
-      const msgs     = el('div', 'ss-chat-messages');
-      const greeting = el('div', 'ss-chat-msg ai');
-      greeting.textContent = config.greeting || 'Ask me about your strengths analysis!';
-      msgs.appendChild(greeting);
+      function makeAiRow(text) {
+        const row = el('div', 'ss-chat-msg-row');
+        if (cfg.steveAvatarUrl) {
+          const img = document.createElement('img');
+          img.src = cfg.steveAvatarUrl; img.alt = 'Steve'; img.className = 'ss-chat-msg-avatar';
+          row.appendChild(img);
+        }
+        const bubble = el('div', 'ss-chat-msg ai');
+        bubble.textContent = text;
+        row.appendChild(bubble);
+        return row;
+      }
+      function makeTypingRow() {
+        const row = el('div', 'ss-chat-msg-row');
+        if (cfg.steveAvatarUrl) {
+          const img = document.createElement('img');
+          img.src = cfg.steveAvatarUrl; img.alt = 'Steve'; img.className = 'ss-chat-msg-avatar';
+          row.appendChild(img);
+        }
+        row.appendChild(html('div', 'ss-chat-msg ai typing-dots',
+          '<div class="ss-dots"><span></span><span></span><span></span></div>'));
+        return row;
+      }
+
+      const greetingText = config.greeting || 'Ask me about your strengths analysis!';
+      const msgs = el('div', 'ss-chat-messages');
+      msgs.appendChild(makeAiRow(greetingText));
       widget.appendChild(msgs);
+
+      newChatBtn.onclick = () => {
+        while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
+        msgs.appendChild(makeAiRow(greetingText));
+        input.value = ''; input.style.height = 'auto';
+      };
 
       const inputRow = el('div', 'ss-chat-input-row');
       const input    = el('textarea', 'ss-chat-input');
       input.placeholder = 'Ask me anything…';
       input.rows = 1;
       const sendBtn = el('button', 'ss-chat-send-btn');
-    sendBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.5 10L17.5 3.33333L10.8333 17.5L8.75 11.25L2.5 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      sendBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2.5 10L17.5 3.33333L10.8333 17.5L8.75 11.25L2.5 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
       const ajaxUrl = (window.stevegpt || {}).ajax_url || '/wp-admin/admin-ajax.php';
       const nonce   = (window.stevegpt || {}).nonce   || '';
@@ -3955,43 +4004,32 @@
       async function sendMessage() {
         const msg = input.value.trim();
         if (!msg || sendBtn.disabled) return;
-        input.value = '';
-        input.style.height = 'auto';
+        input.value = ''; input.style.height = 'auto';
         sendBtn.disabled = true;
-
         const userMsg = el('div', 'ss-chat-msg user');
         userMsg.textContent = msg;
         msgs.appendChild(userMsg);
-
-        const typing = html('div', 'ss-chat-msg ai typing-dots',
-          '<div class="ss-dots"><span></span><span></span><span></span></div>');
-        msgs.appendChild(typing);
+        const typingRow = makeTypingRow();
+        msgs.appendChild(typingRow);
         msgs.scrollTop = msgs.scrollHeight;
-
         try {
           const res  = await fetch(ajaxUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             credentials: 'same-origin',
             body: new URLSearchParams({
-              action:          'stevegpt_send_message',
-              nonce,
-              chatbot_id:      config.chatbot_id,
+              action: 'stevegpt_send_message', nonce,
+              chatbot_id: config.chatbot_id,
               conversation_id: config.conversation_id || '',
-              message:         msg,
-              context:         config.context || '',
+              message: msg, context: config.context || '',
             }),
           });
           const json = await res.json();
-          typing.remove();
-          const aiMsg = el('div', 'ss-chat-msg ai');
-          aiMsg.textContent = json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.';
-          msgs.appendChild(aiMsg);
+          typingRow.remove();
+          msgs.appendChild(makeAiRow(json.success ? json.data.response : 'Sorry, I had trouble with that. Please try again.'));
         } catch (_) {
-          typing.remove();
-          const errMsg = el('div', 'ss-chat-msg ai');
-          errMsg.textContent = 'Connection error. Please try again.';
-          msgs.appendChild(errMsg);
+          typingRow.remove();
+          msgs.appendChild(makeAiRow('Connection error. Please try again.'));
         }
         sendBtn.disabled = false;
         msgs.scrollTop = msgs.scrollHeight;
