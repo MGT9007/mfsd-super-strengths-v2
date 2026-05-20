@@ -63,6 +63,7 @@ class MFSD_SS_API {
         register_rest_route($ns, '/demo/flip',        [['methods'=>'POST', 'callback'=>[$me,'demo_flip'],        'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/heartbeat',   [['methods'=>'POST', 'callback'=>[$me,'demo_heartbeat'],   'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/summary',     [['methods'=>'GET',  'callback'=>[$me,'demo_summary'],     'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/award-badge', [['methods'=>'POST', 'callback'=>[$me,'demo_award_badge'], 'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/chat-widget', [['methods'=>'GET',  'callback'=>[$me,'demo_chat_widget'], 'permission_callback'=>[$me,'auth']]]);
     }
 
@@ -1974,6 +1975,26 @@ class MFSD_SS_API {
             'total_pairs'      => $data['total_pairs'],
             'sections'         => $summary['sections'] ?? [],
             'ai_summary'       => $summary['raw'] ?? '',
+        ]);
+    }
+
+    // =========================================================================
+    // DEMO MODE — POST /demo/award-badge
+    // Called by frontend after student views summary.
+    // =========================================================================
+    public static function demo_award_badge(WP_REST_Request $req) {
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Demo::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
+
+        $completion_slug = MFSD_SS_Badges::award_completion($uid, $game_id);
+
+        return rest_ensure_response([
+            'ok'                   => true,
+            'completion_earned'    => (bool) $completion_slug,
+            'completion_badge_url' => $completion_slug ? MFSD_SS_URL . 'assets/badges/' . $completion_slug . '.png' : '',
         ]);
     }
 

@@ -3896,17 +3896,38 @@
 
   async function renderDemoSummary() {
     const body    = el('div', 'ss-screen-body');
-    const loadDiv = el('div', '');
-    loadDiv.style.cssText = 'padding:60px 20px;text-align:center;';
-    loadDiv.innerHTML = '<div class="ss-waiting"><div class="ss-dots"><span></span><span></span><span></span></div>'
-      + '<div style="margin-top:14px;color:var(--ss-text-dim);font-size:14px;">Steve is writing your analysis…</div></div>';
+    const loadDiv = el('div', 'ss-demo-loading');
+    const avatarHtml = cfg.steveAvatarUrl
+      ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-demo-loading-avatar">`
+      : '<div class="ss-demo-loading-avatar-fallback">🤖</div>';
+    const loadMsgs = [
+      'Looking at what you picked…',
+      'Comparing Steve\'s choices…',
+      'Finding what you have in common…',
+      'Writing your personal analysis…',
+      'Almost ready…',
+    ];
+    loadDiv.innerHTML = avatarHtml
+      + '<div class="ss-steve-spinner" style="margin:16px auto 0;"></div>'
+      + '<div class="ss-demo-loading-msg">' + escHtml(loadMsgs[0]) + '</div>';
     body.appendChild(loadDiv);
     render(body);
 
+    let msgIdx = 0;
+    const msgEl = loadDiv.querySelector('.ss-demo-loading-msg');
+    const rotator = setInterval(() => {
+      msgIdx = (msgIdx + 1) % loadMsgs.length;
+      if (msgEl) msgEl.textContent = loadMsgs[msgIdx];
+    }, 2000);
+
     try {
       const data = await api('demo/summary?game_id=' + state.gameId, 'GET');
-      renderDemoSummaryUI(data);
+      clearInterval(rotator);
+      let badgeInfo = null;
+      try { badgeInfo = await api('demo/award-badge', 'POST', { game_id: state.gameId }); } catch (_) {}
+      renderDemoSummaryUI(data, badgeInfo);
     } catch (e) {
+      clearInterval(rotator);
       const b = el('div', 'ss-screen-body');
       b.innerHTML = '<div style="padding:40px;text-align:center;">'
         + '<div style="color:var(--ss-red);margin-bottom:16px;">Could not load summary. Please try again.</div>'
@@ -3915,7 +3936,7 @@
     }
   }
 
-  function renderDemoSummaryUI(data) {
+  function renderDemoSummaryUI(data, badgeInfo) {
     const body   = el('div', 'ss-screen-body');
     const header = el('div', 'ss-game-header');
     header.innerHTML = '<div class="ss-game-title">💡 Steve\'s Analysis</div>'
@@ -3971,10 +3992,39 @@
       inner.appendChild(aiCard);
     }
 
+    // Badge award
+    if (badgeInfo && badgeInfo.completion_earned) {
+      const badgeWrap = el('div', 'ss-card');
+      badgeWrap.style.margin = '0 16px 16px';
+      inner.appendChild(badgeWrap);
+      setTimeout(() => {
+        badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Badge Earned!</div>';
+        renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
+      }, 600);
+    }
+
+    // Chat widget
     const chatEl = el('div', '');
     chatEl.id    = 'ss-demo-chat-placeholder';
-    chatEl.style.padding = '0 16px 16px';
+    chatEl.style.padding = '0 16px 8px';
     inner.appendChild(chatEl);
+
+    // Nav buttons
+    const navWrap = el('div', '');
+    navWrap.style.cssText = 'padding:0 16px 32px;display:flex;flex-direction:column;gap:10px;';
+    if (badgeInfo && badgeInfo.completion_earned) {
+      const badgeLink = document.createElement('a');
+      badgeLink.href      = cfg.badgesUrl;
+      badgeLink.className = 'ss-btn ss-btn-gold ss-btn-full';
+      badgeLink.textContent = '🏅 View My Badges';
+      navWrap.appendChild(badgeLink);
+    }
+    const courseLink = document.createElement('a');
+    courseLink.href      = cfg.portalUrl + '?course_id=' + cfg.courseId + '&student_id=' + cfg.userId;
+    courseLink.className = 'ss-btn ss-btn-ghost ss-btn-full';
+    courseLink.textContent = '📚 Back to My Course';
+    navWrap.appendChild(courseLink);
+    inner.appendChild(navWrap);
 
     body.appendChild(inner);
     render(body);

@@ -1604,27 +1604,51 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 
 .ss-ai-section-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 0;
+  border-bottom: 2px solid var(--ss-border);
   margin-bottom: 14px;
 }
 .ss-ai-section-btn {
-  padding: 5px 11px;
-  background: rgba(201,168,76,0.08);
-  border: 1px solid var(--ss-border);
-  border-radius: 20px;
+  flex: 1;
+  padding: 8px 6px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
   color: var(--ss-text-dim);
   font-size: 12px;
+  font-family: var(--ss-font-b);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: color 0.15s, border-color 0.15s;
+  text-align: center;
 }
 .ss-ai-section-btn.active {
-  background: rgba(201,168,76,0.2);
   color: var(--ss-gold-lt);
-  border-color: var(--ss-gold);
+  border-bottom-color: var(--ss-gold);
 }
 .ss-ai-section-content { display: none; font-size: 14px; line-height: 1.75; color: var(--ss-text); white-space: pre-wrap; }
 .ss-ai-section-content.active { display: block; }
+
+.ss-demo-loading {
+  padding: 60px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.ss-demo-loading-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.ss-demo-loading-avatar-fallback { font-size: 56px; line-height: 1; }
+.ss-demo-loading-msg {
+  margin-top: 16px;
+  color: var(--ss-text-dim);
+  font-size: 14px;
+  min-height: 20px;
+}
 
 .ss-strength-chips {
   display: flex;
