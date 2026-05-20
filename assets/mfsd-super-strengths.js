@@ -219,6 +219,7 @@
   // NO GAME — smart screen based on viewer_role returned by state
   // =========================================================================
   function renderNoGame(data) {
+    console.log('[SS-DEBUG] renderNoGame — viewer_role:', data.viewer_role, '| can_start:', data.can_start, '| demoModeEnabled:', cfg.demoModeEnabled);
     const body = el('div', 'ss-screen-body');
     const isStudentViewer = data.viewer_role === 'student' || data.viewer_role === 'unknown';
 
