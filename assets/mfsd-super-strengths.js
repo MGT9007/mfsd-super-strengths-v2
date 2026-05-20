@@ -554,7 +554,7 @@
     {
       const mode     = cfg.demoModeEnabled ? 'demo' : 'family';
       const timeSecs = (cfg.demoTimeLimitMins || 3) * 60;
-      contextPrefix  = `STUDENT CONTEXT:\nName: ${cfg.displayName}\nAge: ${cfg.playerAge || 'unknown'}\n\nGAME CONTEXT:\nMode: ${mode}\n`;
+      contextPrefix  = `STUDENT CONTEXT:\nName: ${cfg.displayName}\nAge: ${+cfg.playerAge || 'unknown'}\n\nGAME CONTEXT:\nMode: ${mode}\n`;
       if (cfg.demoModeEnabled) {
         contextPrefix += `Time limit: ${timeSecs} seconds\nBoard: 20 tiles (5 student picks + 5 Steve picks, each duplicated into pairs)\n`;
       }
