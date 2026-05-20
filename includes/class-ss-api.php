@@ -62,6 +62,7 @@ class MFSD_SS_API {
         register_rest_route($ns, '/demo/board',       [['methods'=>'GET',  'callback'=>[$me,'demo_board'],       'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/flip',        [['methods'=>'POST', 'callback'=>[$me,'demo_flip'],        'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/heartbeat',   [['methods'=>'POST', 'callback'=>[$me,'demo_heartbeat'],   'permission_callback'=>[$me,'auth']]]);
+        register_rest_route($ns, '/demo/complete',    [['methods'=>'POST', 'callback'=>[$me,'demo_complete'],    'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/summary',     [['methods'=>'GET',  'callback'=>[$me,'demo_summary'],     'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/award-badge', [['methods'=>'POST', 'callback'=>[$me,'demo_award_badge'], 'permission_callback'=>[$me,'auth']]]);
         register_rest_route($ns, '/demo/chat-widget', [['methods'=>'GET',  'callback'=>[$me,'demo_chat_widget'], 'permission_callback'=>[$me,'auth']]]);
@@ -1939,6 +1940,39 @@ class MFSD_SS_API {
     }
 
     // =========================================================================
+    // DEMO MODE — POST /demo/complete
+    // Called by client-side timer when it reaches 00:00, before navigating to
+    // the game over screen. Unconditionally marks the game as complete so
+    // GET /demo/summary can proceed without a 400 "game_not_complete" error.
+    // =========================================================================
+    public static function demo_complete(WP_REST_Request $req) {
+        global $wpdb;
+        $uid     = get_current_user_id();
+        $game_id = (int) $req->get_param('game_id');
+
+        $player = MFSD_SS_Demo::get_player($game_id, $uid);
+        if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
+
+        $smg      = $wpdb->prefix . MFSD_SS_DB::TBL_SM_GAMES;
+        $smp      = $wpdb->prefix . MFSD_SS_DB::TBL_SM_PLAYERS;
+        $game_row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$smg} WHERE id = %d", $game_id), ARRAY_A);
+        if (!$game_row || $game_row['game_type'] !== 'demo') {
+            return self::err('not_demo_game', 'Not a demo game', 403);
+        }
+
+        if ($game_row['status'] !== 'complete') {
+            $wpdb->update($smg, [
+                'status'           => 'complete',
+                'winner_player_id' => (int) $player['id'],
+                'completed_at'     => current_time('mysql'),
+            ], ['id' => $game_id]);
+            $wpdb->update($smp, ['current_turn_started_at' => null], ['id' => (int) $player['id']]);
+        }
+
+        return rest_ensure_response(['ok' => true, 'status' => 'complete']);
+    }
+
+    // =========================================================================
     // DEMO MODE — GET /demo/summary
     // =========================================================================
     public static function demo_summary(WP_REST_Request $req) {
@@ -1989,12 +2023,33 @@ class MFSD_SS_API {
         $player = MFSD_SS_Demo::get_player($game_id, $uid);
         if (!$player) return self::err('not_in_game', 'Not in demo game', 403);
 
-        $completion_slug = MFSD_SS_Badges::award_completion($uid, $game_id);
+        // Mark task complete in course progress
+        if (function_exists('mfsd_set_task_status')) {
+            mfsd_set_task_status($uid, 'super_strengths', 'completed');
+        }
+
+        // Completion badge — try to award; if already awarded, fetch existing slug
+        $newly_completion = MFSD_SS_Badges::award_completion($uid, $game_id);
+        $completion_slug  = $newly_completion ?: MFSD_SS_Badges::get_awarded_badge($uid, 'complete') ?: '';
+
+        // Winner badge — only when all pairs matched (perfect score)
+        $winner_slug   = '';
+        $winner_earned = false;
+        $data = MFSD_SS_Demo::get_summary_data($game_id);
+        if (!empty($data) && (int) $data['total_pairs'] > 0 && (int) $data['matched_pairs'] >= (int) $data['total_pairs']) {
+            $try_winner    = MFSD_SS_Badges::award_winner($uid, $game_id);
+            $winner_earned = (bool) $try_winner;
+            $winner_slug   = $try_winner ?: MFSD_SS_Badges::get_awarded_badge($uid, 'winner') ?: '';
+        }
 
         return rest_ensure_response([
             'ok'                   => true,
-            'completion_earned'    => (bool) $completion_slug,
+            'completion_earned'    => (bool) $newly_completion,
+            'completion_slug'      => $completion_slug,
             'completion_badge_url' => $completion_slug ? MFSD_SS_URL . 'assets/badges/' . $completion_slug . '.png' : '',
+            'winner_earned'        => $winner_earned,
+            'winner_slug'          => $winner_slug,
+            'winner_badge_url'     => $winner_slug ? MFSD_SS_URL . 'assets/badges/' . $winner_slug . '.png' : '',
         ]);
     }
 

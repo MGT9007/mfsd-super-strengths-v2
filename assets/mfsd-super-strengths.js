@@ -230,7 +230,7 @@
             state.gameType = 'demo';
             if (demoSt.game.status === 'complete') {
               state.gameStatus = 'complete';
-              renderDemoGameOver();
+              renderDemoSummary();
             } else {
               state.gameStatus = 'playing';
               await renderDemoBoard(true);
@@ -3481,7 +3481,7 @@
         state.gameId     = data.game.game_id;
         state.gameType   = 'demo';
         state.gameStatus = 'complete';
-        renderDemoGameOver();
+        renderDemoSummary();
         return;
       }
       if (data.game && data.game.found) {
@@ -3751,9 +3751,11 @@
         timerEl.textContent = '⏱ ' + m + ':' + s;
         if (secs === 0) {
           clearInterval(timerEl._clockInterval);
+          boardGrid.querySelectorAll('.ss-card-tile').forEach(t => t.style.pointerEvents = 'none');
           stopHeartbeat();
           state.gameStatus = 'complete';
-          setTimeout(() => renderDemoGameOver(), 800);
+          api('demo/complete', 'POST', { game_id: state.gameId }).catch(() => {})
+            .finally(() => renderDemoGameOver());
         }
       };
       updateTimer();
@@ -3941,9 +3943,16 @@
     } catch (e) {
       clearInterval(rotator);
       const b = el('div', 'ss-screen-body');
-      b.innerHTML = '<div style="padding:40px;text-align:center;">'
-        + '<div style="color:var(--ss-red);margin-bottom:16px;">Could not load summary. Please try again.</div>'
-        + '<button class="ss-btn ss-btn-demo" onclick="location.reload()">Reload</button></div>';
+      const errDiv = el('div', '');
+      errDiv.style.cssText = 'padding:40px;text-align:center;';
+      const errMsg = el('div', '');
+      errMsg.style.cssText = 'color:var(--ss-red);margin-bottom:16px;';
+      errMsg.textContent = 'Could not load summary. Please try again.';
+      const retryBtn = el('button', 'ss-btn ss-btn-demo', 'Retry');
+      retryBtn.onclick = renderDemoSummary;
+      errDiv.appendChild(errMsg);
+      errDiv.appendChild(retryBtn);
+      b.appendChild(errDiv);
       render(b);
     }
   }
@@ -4004,15 +4013,38 @@
       inner.appendChild(aiCard);
     }
 
-    // Badge award
-    if (badgeInfo && badgeInfo.completion_earned) {
+    // Badge awards — show on first AND subsequent visits
+    const hasCompletionBadge = badgeInfo && badgeInfo.completion_slug;
+    const hasWinnerBadge     = badgeInfo && badgeInfo.winner_slug;
+
+    if (hasCompletionBadge) {
       const badgeWrap = el('div', 'ss-card');
       badgeWrap.style.margin = '0 16px 16px';
       inner.appendChild(badgeWrap);
-      setTimeout(() => {
-        badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Badge Earned!</div>';
+      if (badgeInfo.completion_earned) {
+        setTimeout(() => {
+          badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Badge Earned!</div>';
+          renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
+        }, 600);
+      } else {
+        badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Your Badge</div>';
         renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
-      }, 600);
+      }
+    }
+
+    if (hasWinnerBadge) {
+      const winnerWrap = el('div', 'ss-card');
+      winnerWrap.style.margin = '0 16px 16px';
+      inner.appendChild(winnerWrap);
+      if (badgeInfo.winner_earned) {
+        setTimeout(() => {
+          winnerWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🏆 Winner Badge!</div>';
+          renderBadgeAward(winnerWrap, badgeInfo.winner_badge_url, 'Winner', 15);
+        }, 1200);
+      } else {
+        winnerWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🏆 Winner Badge</div>';
+        renderBadgeAward(winnerWrap, badgeInfo.winner_badge_url, 'Winner', 15);
+      }
     }
 
     // Chat widget
@@ -4024,7 +4056,7 @@
     // Nav buttons
     const navWrap = el('div', '');
     navWrap.style.cssText = 'padding:0 16px 32px;display:flex;flex-direction:column;gap:10px;';
-    if (badgeInfo && badgeInfo.completion_earned) {
+    if (hasCompletionBadge || hasWinnerBadge) {
       const badgeLink = document.createElement('a');
       badgeLink.href      = cfg.badgesUrl;
       badgeLink.className = 'ss-btn ss-btn-gold ss-btn-full';
