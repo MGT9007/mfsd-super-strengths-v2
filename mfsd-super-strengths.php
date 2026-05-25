@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
- * Version: 5.3.6
+ * Version: 5.3.7
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '5.3.6');
+define('MFSD_SS_VERSION', '5.3.7');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 

@@ -25,6 +25,7 @@
     heartbeatTimer:       null,   // setInterval reference
     demoTimerInterval:    null,   // demo countdown — tracked so re-renders don't leak intervals
     pendingFlipPos:       null,   // position of flip 1 while awaiting flip 2
+    boardLocked:          false,  // true during no-match pause or match animation to block extra flips
     winnerPlayerId:       null,   // set when game_complete
     // Legacy guessing game
     gameMode:      cfg.gameMode || 'full',
@@ -2859,7 +2860,7 @@
         tile.innerHTML = buildCardFront(pos.content);
       } else {
         tile.innerHTML = `<div class="ss-card-tile-back"><span class="ss-ct-back-icon">⭐</span></div>`;
-        if (isMyTurn) {
+        if (isMyTurn && !state.boardLocked) {
           tile.classList.add('flippable');
           tile.addEventListener('click', () => handleFlip(pos.position, tile, boardGrid));
         }
@@ -2916,8 +2917,10 @@
           if (ap) ap.score = res.new_score;
         }
 
+        state.boardLocked = true;
         renderBoardUI(getCurrentStateForUI(), state.board);
         await showMatchMoment(res.matched_pair, res.is_self_strength_match);
+        state.boardLocked = false;
 
         if (res.game_complete) {
           stopHeartbeat(); stopPoll();
@@ -2932,12 +2935,14 @@
 
       } else {
         // No match — show both face-up for 1.5 s then rotate
+        state.boardLocked = true;
         renderBoardUI(getCurrentStateForUI(), state.board);
         await new Promise(r => setTimeout(r, 1500));
 
         state.board.forEach(p => { if (p.is_face_up && !p.is_matched) p.is_face_up = false; });
         state.pendingFlipPos      = null;
         state.currentTurnPlayerId = res.next_player_id || null;
+        state.boardLocked = false;
 
         if (res.next_player_id !== myPlayerId()) {
           renderBoardUI(getCurrentStateForUI(), state.board);
@@ -3778,8 +3783,10 @@
         tile.innerHTML = buildCardFront(pos.content);
       } else {
         tile.innerHTML = `<div class="ss-card-tile-back"><span class="ss-ct-back-icon">⭐</span></div>`;
-        tile.classList.add('flippable');
-        tile.addEventListener('click', () => handleDemoFlip(pos.position, tile, boardGrid));
+        if (!state.boardLocked) {
+          tile.classList.add('flippable');
+          tile.addEventListener('click', () => handleDemoFlip(pos.position, tile, boardGrid));
+        }
       }
       boardGrid.appendChild(tile);
     });
@@ -3822,27 +3829,37 @@
 
         const isSteveMatch = res.matched_pair && res.matched_pair[0] && res.matched_pair[0].card_type === 'steve_pick';
 
+        state.boardLocked = true;
         if (res.game_complete) {
           stopHeartbeat();
           state.gameStatus = 'complete';
           if (isSteveMatch) await showDemoRationale(res.matched_pair[0].strength_text, res.source_activity);
           else await showMatchMoment(res.matched_pair, false);
+          state.boardLocked = false;
           renderDemoGameOver();
           return;
         }
 
         if (isSteveMatch) await showDemoRationale(res.matched_pair[0].strength_text, res.source_activity);
         else await showMatchMoment(res.matched_pair, false);
+        state.boardLocked = false;
         renderDemoBoardUI(state.board);
       } else {
+        state.boardLocked = true;
         renderDemoBoardUI(state.board);
         await new Promise(r => setTimeout(r, 1500));
         state.board.forEach(p => { if (p.is_face_up && !p.is_matched) p.is_face_up = false; });
         state.pendingFlipPos = null;
+        state.boardLocked = false;
         renderDemoBoardUI(state.board);
       }
     } catch (e) {
-      renderError(e.message);
+      state.boardLocked = false;
+      if (e.message === 'Card already face up') {
+        renderDemoBoardUI(state.board);
+      } else {
+        renderError(e.message);
+      }
     }
   }
 
