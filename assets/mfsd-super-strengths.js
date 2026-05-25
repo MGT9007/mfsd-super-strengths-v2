@@ -135,9 +135,11 @@
       borderColour = '#e6a817';
       bgColour     = '#18120a';
       prefixColour = '#8a6020';
-      const init   = (author || cfg.displayName || 'Y')[0].toUpperCase();
-      avatarHtml   = `<span class="ss-card-avatar ss-card-avatar-init" style="background:#2a1e08;color:#e6a817;border:1.5px solid #e6a817">${init}</span>`;
-      prefixText   = 'You believe';
+      const init   = (cfg.displayName || 'Y')[0].toUpperCase();
+      avatarHtml   = cfg.studentAvatarUrl
+        ? `<img src="${escHtml(cfg.studentAvatarUrl)}" alt="${escHtml(cfg.displayName)}" class="ss-card-avatar" style="border:1.5px solid #e6a817">`
+        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:#2a1e08;color:#e6a817;border:1.5px solid #e6a817">${init}</span>`;
+      prefixText   = 'You think';
     } else {
       const col    = authorColour(author);
       borderColour = col;
@@ -152,8 +154,10 @@
     const prefixStyle = prefixColour ? ` style="color:${prefixColour}"` : '';
 
     return `<div class="ss-card-tile-front" style="border-color:${borderColour};background:${bgColour}">
-      ${avatarHtml}
-      <div class="ss-card-prefix"${prefixStyle}>${prefixText}</div>
+      <div class="ss-card-top">
+        ${avatarHtml}
+        <div class="ss-card-prefix"${prefixStyle}>${prefixText}</div>
+      </div>
       <div class="ss-card-strength">${escHtml(strengthDisplay)}</div>
     </div>`;
   }
