@@ -150,7 +150,7 @@
       prefixText   = escHtml(author) + ' thinks';
     }
 
-    const strengthDisplay = isVerbStrength(sRaw) ? `you ${sLower}` : `you are ${sLower}`;
+    const strengthDisplay = sRaw.charAt(0).toUpperCase() + sRaw.slice(1);
     const prefixStyle = prefixColour ? ` style="color:${prefixColour}"` : '';
 
     return `<div class="ss-card-tile-front" style="border-color:${borderColour};background:${bgColour}">

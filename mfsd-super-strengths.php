@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
- * Version: 5.5.1
+ * Version: 5.5.2
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '5.5.1');
+define('MFSD_SS_VERSION', '5.5.2');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -166,7 +166,7 @@ final class MFSD_Super_Strengths {
             'parentSummaryChatbotId'      => get_option('mfsd_stevegpt_map_ss_parent_summary_chat', ''),
             'demoChatbotId'               => get_option('mfsd_stevegpt_map_ss_demo_chat', ''),
             'steveAvatarUrl'              => $steve_avatar_url,
-            'studentAvatarUrl'            => get_avatar_url($user_id, ['size' => 80]) ?: '',
+            'studentAvatarUrl'            => function_exists('mfsd_get_user_avatar_url') ? mfsd_get_user_avatar_url($user_id) : (get_avatar_url($user_id, ['size' => 80]) ?: ''),
             'welcomeChatContext'          => $welcome_chat_context,
         ]);
 
