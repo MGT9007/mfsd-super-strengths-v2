@@ -1331,10 +1331,11 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   gap: 10px;
   padding: 16px;
 }
-.ss-board-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.ss-board-grid-6 { grid-template-columns: repeat(6, 1fr); }
+.ss-board-grid-4 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.ss-board-grid-6 { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
 
 @media (max-width: 480px) {
+  .ss-board-grid-4,
   .ss-board-grid-6 { grid-template-columns: repeat(4, 1fr); }
   .ss-card-tile { min-height: 70px; }
 }
