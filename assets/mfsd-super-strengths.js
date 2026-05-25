@@ -2797,10 +2797,6 @@
 
     const body = el('div', 'ss-screen-body');
 
-    const header = el('div', 'ss-game-header');
-    header.innerHTML = `<div class="ss-game-title">🧠 Super Strengths Memory</div>`;
-    body.appendChild(header);
-
     // Scoreboard
     const scoreboard = el('div', 'ss-scoreboard');
     allPlayers.forEach(p => {
@@ -3748,10 +3744,6 @@
   function renderDemoBoardUI(positions) {
     if (state.demoTimerInterval) { clearInterval(state.demoTimerInterval); state.demoTimerInterval = null; }
     const body = el('div', 'ss-screen-body');
-
-    const header = el('div', 'ss-game-header');
-    header.innerHTML = '<div class="ss-game-title">' + (steveAvatarImg('ss-header-avatar', 28) || '🤖') + ' Steve\'s Demo</div>';
-    body.appendChild(header);
 
     const matchedPairs = positions.filter(p => p.is_matched).length / 2;
     const totalPairs   = positions.length / 2;
