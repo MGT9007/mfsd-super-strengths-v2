@@ -75,6 +75,14 @@ class MFSD_SS_API {
         return new WP_Error($code, $msg, ['status' => $status]);
     }
 
+    // Converts a badge slug (e.g. 'badge_ss_complete_harley_steve') to its image
+    // filename (e.g. 'harleysteve1.png') by stripping the type prefix and removing
+    // underscores from the design name, then appending '1.png'.
+    private static function badge_slug_to_image(string $slug): string {
+        $design = preg_replace('/^badge_ss_(?:complete|winner)_/', '', $slug);
+        return str_replace('_', '', $design) . '1.png';
+    }
+
     private static function get_player($game_id, $user_id = null) {
         global $wpdb;
         $uid = $user_id ?: get_current_user_id();
@@ -1580,9 +1588,9 @@ class MFSD_SS_API {
         return rest_ensure_response([
             'ok'                   => true,
             'completion_earned'    => (bool) $completion_slug,
-            'completion_badge_url' => $completion_slug ? MFSD_SS_URL . 'assets/badges/' . $completion_slug . '.png' : '',
+            'completion_badge_url' => $completion_slug ? MFSD_SS_URL . 'assets/badges/' . self::badge_slug_to_image($completion_slug) : '',
             'winner_badge_slug'    => $winner_slug ?: null,
-            'winner_badge_url'     => $winner_slug ? MFSD_SS_URL . 'assets/badges/' . $winner_slug . '.png' : '',
+            'winner_badge_url'     => $winner_slug ? MFSD_SS_URL . 'assets/badges/' . self::badge_slug_to_image($winner_slug) : '',
         ]);
     }
 
@@ -2046,10 +2054,10 @@ class MFSD_SS_API {
             'ok'                   => true,
             'completion_earned'    => (bool) $newly_completion,
             'completion_slug'      => $completion_slug,
-            'completion_badge_url' => $completion_slug ? MFSD_SS_URL . 'assets/badges/' . $completion_slug . '.png' : '',
+            'completion_badge_url' => $completion_slug ? MFSD_SS_URL . 'assets/badges/' . self::badge_slug_to_image($completion_slug) : '',
             'winner_earned'        => $winner_earned,
             'winner_slug'          => $winner_slug,
-            'winner_badge_url'     => $winner_slug ? MFSD_SS_URL . 'assets/badges/' . $winner_slug . '.png' : '',
+            'winner_badge_url'     => $winner_slug ? MFSD_SS_URL . 'assets/badges/' . self::badge_slug_to_image($winner_slug) : '',
         ]);
     }
 

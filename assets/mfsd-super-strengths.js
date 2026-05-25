@@ -3338,7 +3338,7 @@
     } else {
       div.appendChild(el('div', 'ss-badge-award-fallback', type === 'Winner' ? '🏆' : '⭐'));
     }
-    div.appendChild(el('div', 'ss-badge-award-name', 'Super Strengths ' + type + ' Badge'));
+    div.appendChild(el('div', 'ss-badge-award-name', type === 'Winner' ? 'Super Strengths Winner Badge' : 'Super Strengths Badge'));
     div.appendChild(el('div', 'ss-badge-award-coins', '+' + coins + ' coins'));
     container.appendChild(div);
   }
