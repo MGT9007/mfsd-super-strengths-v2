@@ -299,7 +299,7 @@
       const inner = el('div', '');
       inner.style.padding = '28px 24px';
       const topAvatarHtml = cfg.steveAvatarUrl
-        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-bottom:12px;">`
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">`
         : `<div style="font-size:52px;margin-bottom:12px;">🤖</div>`;
       inner.innerHTML = `
         <div style="text-align:center;margin-bottom:24px;">
@@ -312,7 +312,10 @@
           Try the demo — Steve will select strength cards for you based on your previous activities. No family members needed to get started.
         </div>
       `;
-      const demoBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full', '🤖 Try Demo with Steve');
+      const demoBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full');
+      demoBtn.innerHTML = cfg.steveAvatarUrl
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px;"> Try Demo with Steve`
+        : '🤖 Try Demo with Steve';
       demoBtn.onclick = handleDemoStart;
       inner.appendChild(demoBtn);
 
