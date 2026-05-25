@@ -130,11 +130,11 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
 
 /* ---- Wrapper ---- */
 .ss-wrap {
-  max-width: 680px;
-  margin: 0 auto;
+  width: 100%;
   padding: 16px;
   font-family: var(--ss-font-b);
   color: var(--ss-text);
+  box-sizing: border-box;
 }
 
 /* ---- Top bar ---- */
