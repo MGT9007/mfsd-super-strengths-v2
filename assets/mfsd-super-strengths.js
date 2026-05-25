@@ -2854,6 +2854,7 @@
     const boardGrid = el('div', `ss-board-grid ss-board-grid-${colCount}`);
 
     positions.forEach((pos, i) => {
+      if (i % 5 === 0) boardGrid.appendChild(el('div', 'ss-board-spacer'));
       const tile = el('div', 'ss-card-tile');
       if (pos.is_matched) {
         tile.classList.add('matched');
@@ -2869,6 +2870,7 @@
         }
       }
       boardGrid.appendChild(tile);
+      if (i % 5 === 4) boardGrid.appendChild(el('div', 'ss-board-spacer'));
     });
 
     body.appendChild(boardGrid);
@@ -3784,7 +3786,8 @@
     }
 
     const boardGrid = el('div', 'ss-board-grid ss-board-grid-4');
-    positions.forEach(pos => {
+    positions.forEach((pos, i) => {
+      if (i % 5 === 0) boardGrid.appendChild(el('div', 'ss-board-spacer'));
       const tile = el('div', 'ss-card-tile');
       if (pos.is_matched) {
         tile.classList.add('matched');
@@ -3800,6 +3803,7 @@
         }
       }
       boardGrid.appendChild(tile);
+      if (i % 5 === 4) boardGrid.appendChild(el('div', 'ss-board-spacer'));
     });
 
     body.appendChild(boardGrid);
