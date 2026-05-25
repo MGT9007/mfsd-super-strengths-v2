@@ -201,7 +201,7 @@
     const strengthDisplay = strengthYouPhrase(sRaw);
     const prefixStyle = prefixColour ? ` style="color:${prefixColour}"` : '';
 
-    return `<div class="ss-card-tile-front" style="border-color:${borderColour};background:${bgColour}">
+    return `<div class="ss-card-tile-front" style="border-color:${borderColour}">
       <div class="ss-card-top">
         ${avatarHtml}
         <div class="ss-card-prefix"${prefixStyle}>${prefixText}</div>
