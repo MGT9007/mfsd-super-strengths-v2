@@ -121,32 +121,39 @@
     const sLower  = sRaw.toLowerCase();
     const author  = content.author_display || '';
 
-    let borderColour, avatarHtml, prefixText;
+    let borderColour, bgColour, prefixColour, avatarHtml, prefixText;
 
     if (type === 'steve_pick') {
-      borderColour = '#00D4FF';
+      borderColour = '#00b8d9';
+      bgColour     = '#061624';
+      prefixColour = '#2a6a88';
       avatarHtml   = cfg.steveAvatarUrl
-        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-card-avatar">`
-        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:rgba(0,212,255,0.15);color:#00D4FF">S</span>`;
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-card-avatar" style="border:1.5px solid #00b8d9">`
+        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:#0a1e30;color:#00b8d9;border:1.5px solid #00b8d9">S</span>`;
       prefixText = 'Steve thinks';
     } else if (type === 'self_strength') {
       borderColour = '#e6a817';
-      const init   = (cfg.displayName || 'Y')[0].toUpperCase();
-      avatarHtml   = `<span class="ss-card-avatar ss-card-avatar-init" style="background:rgba(230,168,23,0.15);color:#e6a817">${init}</span>`;
-      prefixText   = 'You think';
+      bgColour     = '#18120a';
+      prefixColour = '#8a6020';
+      const init   = (author || cfg.displayName || 'Y')[0].toUpperCase();
+      avatarHtml   = `<span class="ss-card-avatar ss-card-avatar-init" style="background:#2a1e08;color:#e6a817;border:1.5px solid #e6a817">${init}</span>`;
+      prefixText   = 'You believe';
     } else {
       const col    = authorColour(author);
       borderColour = col;
+      bgColour     = col + '1a';
+      prefixColour = '';
       const init   = (author || '?')[0].toUpperCase();
-      avatarHtml   = `<span class="ss-card-avatar ss-card-avatar-init" style="background:${col}26;color:${col}">${init}</span>`;
+      avatarHtml   = `<span class="ss-card-avatar ss-card-avatar-init" style="background:${col}26;color:${col};border:1.5px solid ${col}">${init}</span>`;
       prefixText   = escHtml(author) + ' thinks';
     }
 
     const strengthDisplay = isVerbStrength(sRaw) ? `you ${sLower}` : `you are ${sLower}`;
+    const prefixStyle = prefixColour ? ` style="color:${prefixColour}"` : '';
 
-    return `<div class="ss-card-tile-front" style="border-color:${borderColour}">
+    return `<div class="ss-card-tile-front" style="border-color:${borderColour};background:${bgColour}">
       ${avatarHtml}
-      <div class="ss-card-prefix">${prefixText}</div>
+      <div class="ss-card-prefix"${prefixStyle}>${prefixText}</div>
       <div class="ss-card-strength">${escHtml(strengthDisplay)}</div>
     </div>`;
   }
