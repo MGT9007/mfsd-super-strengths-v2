@@ -1684,8 +1684,8 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   margin: 0 12px;
 }
 .ss-badge-award-img {
-  width: 100px;
-  height: 100px;
+  width: 150px;
+  height: 150px;
   object-fit: contain;
   animation: ss-badge-pop 0.5s cubic-bezier(0.34,1.56,0.64,1);
 }

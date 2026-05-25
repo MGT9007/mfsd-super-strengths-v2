@@ -4039,34 +4039,25 @@
     const hasCompletionBadge = badgeInfo && badgeInfo.completion_slug;
     const hasWinnerBadge     = badgeInfo && badgeInfo.winner_slug;
 
-    if (hasCompletionBadge) {
+    if (hasCompletionBadge || hasWinnerBadge) {
       const badgeWrap = el('div', 'ss-card');
       badgeWrap.style.margin = '0 16px 16px';
       inner.appendChild(badgeWrap);
-      if (badgeInfo.completion_earned) {
-        setTimeout(() => {
-          badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Badge Earned!</div>';
-          renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
-        }, 600);
-      } else {
-        badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Your Badge</div>';
-        renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
-      }
-    }
 
-    if (hasWinnerBadge) {
-      const winnerWrap = el('div', 'ss-card');
-      winnerWrap.style.margin = '0 16px 16px';
-      inner.appendChild(winnerWrap);
-      if (badgeInfo.winner_earned) {
-        setTimeout(() => {
-          winnerWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🏆 Winner Badge!</div>';
-          renderBadgeAward(winnerWrap, badgeInfo.winner_badge_url, 'Winner', 15);
-        }, 1200);
-      } else {
-        winnerWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🏆 Winner Badge</div>';
-        renderBadgeAward(winnerWrap, badgeInfo.winner_badge_url, 'Winner', 15);
-      }
+      const anyNewBadge = (hasCompletionBadge && badgeInfo.completion_earned) || (hasWinnerBadge && badgeInfo.winner_earned);
+      const both = hasCompletionBadge && hasWinnerBadge;
+      const headingText = anyNewBadge
+        ? '🎖️ Badge' + (both ? 's' : '') + ' Earned!'
+        : '🎖️ Your Badge' + (both ? 's' : '');
+
+      const renderBadges = () => {
+        badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">' + headingText + '</div>';
+        if (hasCompletionBadge) renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
+        if (hasWinnerBadge)     renderBadgeAward(badgeWrap, badgeInfo.winner_badge_url, 'Winner', 15);
+      };
+
+      if (anyNewBadge) setTimeout(renderBadges, 600);
+      else renderBadges();
     }
 
     // Chat widget
