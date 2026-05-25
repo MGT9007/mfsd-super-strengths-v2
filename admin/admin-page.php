@@ -156,22 +156,38 @@ if (isset($_POST['ss_reset_sm_game']) && check_admin_referer('mfsd_ss_reset_sm')
         $wpdb->query($wpdb->prepare("DELETE FROM $smp  WHERE game_id = %d", $gid));
         $wpdb->query($wpdb->prepare("DELETE FROM $smg  WHERE id = %d", $gid));
 
-        if ($student_id && function_exists('mfsd_set_task_status')) {
-            mfsd_set_task_status($student_id, 'super_strengths', 'available');
+        // Reset task progress — mfsd_set_task_status() only accepts 'in_progress'/'completed'
+        // and refuses to downgrade from 'completed', so we delete the row directly.
+        if ($student_id) {
+            $wpdb->delete(
+                $wpdb->prefix . 'mfsd_task_progress',
+                ['student_id' => $student_id, 'task_slug' => 'super_strengths'],
+                ['%d', '%s']
+            );
         }
 
-        // Remove all SS badges for this student (testing/support reset)
+        // Remove all SS badges and wallet entries for this student (testing/support reset)
         if ($student_id) {
             $badge_table = $wpdb->prefix . 'mfsd_badges';
             if ($wpdb->get_var("SHOW TABLES LIKE '$badge_table'") === $badge_table) {
                 $wpdb->query($wpdb->prepare(
                     "DELETE FROM $badge_table WHERE student_id = %d AND (badge_slug LIKE %s OR badge_slug = %s)",
-                    $student_id, 'badge_ss_%', 'badge_super_strengths'
+                    $student_id,
+                    $wpdb->esc_like('badge_ss_') . '%',
+                    'badge_super_strengths'
+                ));
+            }
+            $wallet_table = $wpdb->prefix . 'mfsd_wallet';
+            if ($wpdb->get_var("SHOW TABLES LIKE '$wallet_table'") === $wallet_table) {
+                $wpdb->query($wpdb->prepare(
+                    "DELETE FROM $wallet_table WHERE student_id = %d AND source LIKE %s",
+                    $student_id,
+                    $wpdb->esc_like('badge_ss_') . '%'
                 ));
             }
         }
 
-        $notice = ['success', "Game #{$gid} fully deleted. Task status reset to 'available'" . ($student_id ? " for user #{$student_id}" : '') . '. SS badges removed.'];
+        $notice = ['success', "Game #{$gid} fully deleted. Task status and SS badges reset" . ($student_id ? " for user #{$student_id}" : '') . '.'];
     }
 }
 
