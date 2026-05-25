@@ -1849,6 +1849,10 @@ class MFSD_SS_API {
         $picks = MFSD_SS_Demo::generate_steve_picks($game_id, $uid, $user->display_name, $age, $self_strengths);
         MFSD_SS_Demo::deal_demo_board($game_id, $player_id, $picks, $self_strengths);
 
+        // MYF-227: begin AI summary generation immediately in background so it's
+        // ready (or nearly ready) by the time the student finishes playing.
+        wp_schedule_single_event(time(), 'mfsd_ss_generate_demo_summary', [$game_id, $player_id]);
+
         $positions = MFSD_SS_Memory::get_board($game_id);
 
         if (empty($positions)) {
@@ -1975,6 +1979,17 @@ class MFSD_SS_API {
                 'completed_at'     => current_time('mysql'),
             ], ['id' => $game_id]);
             $wpdb->update($smp, ['current_turn_started_at' => null], ['id' => (int) $player['id']]);
+
+            // MYF-227: drop the pre-generated summary (matched_pairs was 0 at deal time)
+            // and regenerate immediately with the real score in the background.
+            // The celebration screen buys ~5-10s — enough for the AI call to complete.
+            $smsu = $wpdb->prefix . MFSD_SS_DB::TBL_SM_SUMMARIES;
+            $wpdb->delete($smsu, [
+                'game_id'      => $game_id,
+                'player_id'    => (int) $player['id'],
+                'summary_type' => 'demo',
+            ]);
+            wp_schedule_single_event(time(), 'mfsd_ss_generate_demo_summary', [$game_id, (int) $player['id']]);
         }
 
         return rest_ensure_response(['ok' => true, 'status' => 'complete']);

@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
- * Version: 5.5.5
+ * Version: 5.5.6
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '5.5.5');
+define('MFSD_SS_VERSION', '5.5.6');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -38,7 +38,8 @@ final class MFSD_Super_Strengths {
         add_action('admin_menu',    [$this, 'admin_menu']);
 
         add_filter('stevegpt_plugin_integration_slots', [$this, 'register_stevegpt_slots']);
-        add_action('mfsd_ss_turn_timeout_check', ['MFSD_SS_Memory', 'run_turn_timeout_check']);
+        add_action('mfsd_ss_turn_timeout_check',       ['MFSD_SS_Memory', 'run_turn_timeout_check']);
+        add_action('mfsd_ss_generate_demo_summary',    ['MFSD_SS_Demo',   'generate_demo_ai_summary'], 10, 2);
         if (!wp_next_scheduled('mfsd_ss_turn_timeout_check')) {
             wp_schedule_event(time(), 'hourly', 'mfsd_ss_turn_timeout_check');
         }

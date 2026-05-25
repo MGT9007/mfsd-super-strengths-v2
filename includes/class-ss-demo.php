@@ -636,7 +636,11 @@ class MFSD_SS_Demo {
             $p .= "Rationale: {$pick['rationale']}\n\n";
         }
 
-        $p .= "Pairs matched: {$data['matched_pairs']} of {$data['total_pairs']}\n";
+        // Only include match score when the game is complete — at deal-time pre-generation
+        // matched_pairs is 0 and including it would produce misleading AI output.
+        if (($data['game']['status'] ?? '') === 'complete' || $data['matched_pairs'] > 0) {
+            $p .= "Pairs matched: {$data['matched_pairs']} of {$data['total_pairs']}\n";
+        }
         $p .= "Shared strengths (student also chose these): " . (empty($data['shared_strengths']) ? 'none' : implode(', ', $data['shared_strengths'])) . "\n";
         $p .= "Steve's unique picks: " . (empty($data['hidden_strengths']) ? 'none' : implode(', ', $data['hidden_strengths'])) . "\n\n";
         $p .= "Generate the demo summary using the OUTPUT FORMAT in your instructions.";
