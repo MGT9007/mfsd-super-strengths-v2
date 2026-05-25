@@ -134,6 +134,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
   padding: 16px;
   font-family: var(--ss-font-b);
   color: var(--ss-text);
+  background: var(--ss-bg);
   box-sizing: border-box;
 }
 
