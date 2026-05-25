@@ -696,26 +696,23 @@ class MFSD_SS_Demo {
     // =========================================================================
 
     public static function parse_demo_summary_sections(string $raw): array {
-        $markers = [
-            'YOUR_PICKS'        => 'What I Saw In You',
-            'SHARED_AND_HIDDEN' => 'Where We Agree',
-            'WHATS_NEXT'        => "What's Next",
-        ];
-
         $sections = [];
         $parts    = preg_split('/###SECTION:([A-Z_]+)###/', $raw, -1, PREG_SPLIT_DELIM_CAPTURE);
 
         for ($i = 1; $i < count($parts) - 1; $i += 2) {
             $key     = $parts[$i];
             $content = trim($parts[$i + 1] ?? '');
-            if (isset($markers[$key])) {
-                $sections[$key] = ['label' => $markers[$key], 'content' => $content];
+            if ($key && $content !== '') {
+                $sections[$key] = [
+                    'label'   => ucwords(strtolower(str_replace('_', ' ', $key))),
+                    'content' => $content,
+                ];
             }
         }
 
         if (empty($sections)) {
-            $sections['YOUR_PICKS'] = [
-                'label'    => 'What I Saw In You',
+            $sections['SUMMARY'] = [
+                'label'    => 'Summary',
                 'content'  => trim($raw),
                 'fallback' => true,
             ];

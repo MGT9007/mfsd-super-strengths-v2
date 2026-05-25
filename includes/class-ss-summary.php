@@ -474,28 +474,16 @@ class MFSD_SS_Summary {
     // SECTION PARSER
     // =========================================================================
 
-    public static function parse_sections(string $raw, bool $is_student): array {
-        $markers = $is_student ? [
-            'YOUR_STRENGTHS'           => 'Your Super Strengths',
-            'HOW_FAMILY_SEES_YOU'      => 'How Your Family Sees You',
-            'HOW_YOU_SEE_YOUR_PARENTS' => 'How You See Your Parents',
-            'CONCLUSION'               => 'What It All Means',
-        ] : [
-            'HOW_YOUR_CHILD_SEES_THEMSELVES' => 'How Your Child Sees Themselves',
-            'HOW_YOU_SEE_YOUR_CHILD'         => 'How You See Your Child',
-            'HOW_YOUR_CHILD_SEES_YOU'        => 'How Your Child Sees You',
-            'HOW_TO_SUPPORT'                 => 'How to Support',
-        ];
-
+    public static function parse_sections(string $raw, bool $is_student = true): array {
         $sections = [];
         $parts    = preg_split('/###SECTION:([A-Z_]+)###/', $raw, -1, PREG_SPLIT_DELIM_CAPTURE);
 
         for ($i = 1; $i < count($parts) - 1; $i += 2) {
             $key     = $parts[$i];
             $content = trim($parts[$i + 1] ?? '');
-            if (isset($markers[$key])) {
+            if ($key && $content !== '') {
                 $sections[$key] = [
-                    'label'   => $markers[$key],
+                    'label'   => ucwords(strtolower(str_replace('_', ' ', $key))),
                     'content' => $content,
                 ];
             }
@@ -503,9 +491,8 @@ class MFSD_SS_Summary {
 
         // Fallback: API returned no markers
         if (empty($sections)) {
-            $fallback_key = array_key_first($markers);
-            $sections[$fallback_key] = [
-                'label'    => $markers[$fallback_key],
+            $sections['SUMMARY'] = [
+                'label'    => 'Summary',
                 'content'  => trim($raw),
                 'fallback' => true,
             ];
