@@ -172,21 +172,21 @@
     let borderColour, bgColour, prefixColour, avatarHtml, prefixText;
 
     if (type === 'steve_pick') {
-      borderColour = '#00b8d9';
-      bgColour     = '#061624';
-      prefixColour = '#2a6a88';
+      borderColour = '#e63946';
+      bgColour     = '#1a0608';
+      prefixColour = '#8a2020';
       avatarHtml   = cfg.steveAvatarUrl
-        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-card-avatar" style="border:1.5px solid #00b8d9">`
-        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:#0a1e30;color:#00b8d9;border:1.5px solid #00b8d9">S</span>`;
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="Steve" class="ss-card-avatar" style="border:1.5px solid #e63946">`
+        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:#2a0a0a;color:#e63946;border:1.5px solid #e63946">S</span>`;
       prefixText = 'Steve thinks';
     } else if (type === 'self_strength') {
-      borderColour = '#e6a817';
-      bgColour     = '#18120a';
-      prefixColour = '#8a6020';
+      borderColour = '#3b82f6';
+      bgColour     = '#06101a';
+      prefixColour = '#2050a0';
       const init   = (cfg.displayName || 'Y')[0].toUpperCase();
       avatarHtml   = cfg.studentAvatarUrl
-        ? `<img src="${escHtml(cfg.studentAvatarUrl)}" alt="${escHtml(cfg.displayName)}" class="ss-card-avatar" style="border:1.5px solid #e6a817">`
-        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:#2a1e08;color:#e6a817;border:1.5px solid #e6a817">${init}</span>`;
+        ? `<img src="${escHtml(cfg.studentAvatarUrl)}" alt="${escHtml(cfg.displayName)}" class="ss-card-avatar" style="border:1.5px solid #3b82f6">`
+        : `<span class="ss-card-avatar ss-card-avatar-init" style="background:#0a1630;color:#3b82f6;border:1.5px solid #3b82f6">${init}</span>`;
       prefixText   = 'You think';
     } else {
       const col    = authorColour(author);
