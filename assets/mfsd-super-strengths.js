@@ -3170,12 +3170,14 @@
       container.appendChild(badgeWrap);
       setTimeout(() => {
         badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">🎖️ Badge' + (badgeInfo.winner_badge_slug ? 's' : '') + ' Earned!</div>';
+        const row = el('div', 'ss-badge-row');
         if (badgeInfo.completion_earned) {
-          renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
+          renderBadgeAward(row, badgeInfo.completion_badge_url, 'Super Strengths', 10);
         }
         if (badgeInfo.winner_badge_slug) {
-          renderBadgeAward(badgeWrap, badgeInfo.winner_badge_url, 'Winner', 15);
+          renderBadgeAward(row, badgeInfo.winner_badge_url, 'Winner', 15);
         }
+        badgeWrap.appendChild(row);
       }, 600);
     }
 
@@ -3329,12 +3331,18 @@
   function renderBadgeAward(container, imageUrl, type, coins) {
     const div = el('div', 'ss-badge-award-item');
     if (imageUrl) {
+      const imgWrap = el('div', 'ss-badge-award-img-wrap');
       const img = document.createElement('img');
       img.className = 'ss-badge-award-img';
       img.src       = imageUrl;
       img.alt       = type + ' badge';
       img.onerror   = () => { img.replaceWith(el('div', 'ss-badge-award-fallback', type === 'Winner' ? '🏆' : '⭐')); };
-      div.appendChild(img);
+      imgWrap.appendChild(img);
+      if (type === 'Winner') {
+        const trophy = el('div', 'ss-badge-award-trophy', '🏆');
+        imgWrap.appendChild(trophy);
+      }
+      div.appendChild(imgWrap);
     } else {
       div.appendChild(el('div', 'ss-badge-award-fallback', type === 'Winner' ? '🏆' : '⭐'));
     }
@@ -4052,8 +4060,10 @@
 
       const renderBadges = () => {
         badgeWrap.innerHTML = '<div class="ss-section-label" style="margin-bottom:12px;text-align:center;">' + headingText + '</div>';
-        if (hasCompletionBadge) renderBadgeAward(badgeWrap, badgeInfo.completion_badge_url, 'Super Strengths', 10);
-        if (hasWinnerBadge)     renderBadgeAward(badgeWrap, badgeInfo.winner_badge_url, 'Winner', 15);
+        const row = el('div', 'ss-badge-row');
+        if (hasCompletionBadge) renderBadgeAward(row, badgeInfo.completion_badge_url, 'Super Strengths', 10);
+        if (hasWinnerBadge)     renderBadgeAward(row, badgeInfo.winner_badge_url, 'Winner', 15);
+        badgeWrap.appendChild(row);
       };
 
       if (anyNewBadge) setTimeout(renderBadges, 600);
