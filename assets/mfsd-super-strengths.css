@@ -1342,7 +1342,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
 
 /* ── Card tiles ─────────────────────────────────────────────────────────────── */
 .ss-card-tile {
-  aspect-ratio: 2/3;
+  aspect-ratio: 3/4;
   border-radius: 10px;
   overflow: hidden;
   cursor: default;
