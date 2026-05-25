@@ -43,7 +43,18 @@ class MFSD_SS_Badges {
         $prefix = 'badge_ss_' . $type . '_';
         if (self::has_badge_type($student_id, $prefix)) return false;
 
-        $design = self::DESIGNS[array_rand(self::DESIGNS)];
+        $designs = self::DESIGNS;
+
+        // Winner badge must use a different design to the completion badge already awarded
+        if ($type === 'winner') {
+            $completion_slug = self::get_awarded_badge($student_id, 'complete');
+            if ($completion_slug) {
+                $completion_design = substr($completion_slug, strlen('badge_ss_complete_'));
+                $designs = array_values(array_filter($designs, fn($d) => $d !== $completion_design));
+            }
+        }
+
+        $design = $designs[array_rand($designs)];
         $slug   = $prefix . $design;
         $coins  = ($type === 'winner') ? self::COINS_WINNER : self::COINS_COMPLETE;
 
