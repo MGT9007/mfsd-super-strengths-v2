@@ -96,6 +96,54 @@
     return VERB_STRENGTH_STARTS.some(v => l.startsWith(v));
   }
 
+  // Full lookup for multi-word and noun-phrase strengths — maps lowercase strength_text
+  // to the "you X" suffix so grammar is correct for every card in the library.
+  // Single-word adjectives not listed here fall through to the "you are X" default.
+  const STRENGTH_YOU_MAP = {
+    'good listener':                   'are a good listener',
+    'storyteller':                     'are a storyteller',
+    'quick learner':                   'are a quick learner',
+    'problem solver':                  'are a problem solver',
+    'natural leader':                  'are a natural leader',
+    'positive mindset':                'have a positive mindset',
+    'solution focused':                'are solution focused',
+    'makes people feel welcome':       'make people feel welcome',
+    'stands up for others':            'stand up for others',
+    'sees the best in people':         'see the best in people',
+    'always there for you':            'are always there for others',
+    'thinks outside the box':          'think outside the box',
+    'sees things differently':         'see things differently',
+    'brings ideas to life':            'bring ideas to life',
+    'asks great questions':            'ask great questions',
+    'never gives up on a challenge':   'never give up on a challenge',
+    'pays attention to detail':        'pay attention to detail',
+    'leads by example':                'lead by example',
+    'makes things happen':             'make things happen',
+    'brings out the best in others':   'bring out the best in others',
+    'gets things done':                'get things done',
+    'you can count on them':           'can always be counted on',
+    'always follows through':          'always follow through',
+    'improving every day':             'are improving every day',
+    'embraces a challenge':            'embrace a challenge',
+    'learns from mistakes':            'learn from mistakes',
+    'keeps going':                     'keep going',
+    'sees the bigger picture':         'see the bigger picture',
+    'turns setbacks into comebacks':   'turn setbacks into comebacks',
+    'makes you laugh':                 'make people laugh',
+    'makes you feel safe':             'make people feel safe',
+    'gives great advice':              'give great advice',
+    'always in your corner':           'are always in their corner',
+    'never judges you':                'never judge others',
+    'shows up when it matters':        'show up when it matters',
+    'home is better with them in it':  'make everywhere feel like home',
+  };
+
+  function strengthYouPhrase(sRaw) {
+    const l = sRaw.toLowerCase().trim();
+    if (STRENGTH_YOU_MAP[l] !== undefined) return `you ${STRENGTH_YOU_MAP[l]}`;
+    return `you are ${l}`;
+  }
+
   function getMatchLabel(card) {
     const type = card.card_type || '';
     const sRaw = card.strength_text || '';
@@ -150,7 +198,7 @@
       prefixText   = escHtml(author) + ' thinks';
     }
 
-    const strengthDisplay = sRaw.charAt(0).toUpperCase() + sRaw.slice(1);
+    const strengthDisplay = strengthYouPhrase(sRaw);
     const prefixStyle = prefixColour ? ` style="color:${prefixColour}"` : '';
 
     return `<div class="ss-card-tile-front" style="border-color:${borderColour};background:${bgColour}">
