@@ -1709,6 +1709,41 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   object-fit: contain;
   display: block;
   animation: ss-badge-pop 0.5s cubic-bezier(0.34,1.56,0.64,1);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.ss-badge-award-img:hover { transform: scale(1.06); }
+.ss-badge-zoom-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: pointer;
+}
+.ss-badge-zoom-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.ss-badge-zoom-img {
+  width: 280px;
+  height: 280px;
+  object-fit: contain;
+}
+.ss-badge-zoom-name {
+  font-family: var(--ss-font-h);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ss-gold-lt);
+  text-align: center;
+}
+.ss-badge-zoom-hint {
+  font-size: 12px;
+  color: var(--ss-text-dim);
 }
 .ss-badge-award-trophy {
   position: absolute;
@@ -2026,6 +2061,9 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
   letter-spacing: 0.07em;
   color: var(--ss-text-dim);
   margin-bottom: 4px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
 }
 .ss-demo-compare-col-steve .ss-demo-compare-heading { color: var(--ss-accent2); }
 
@@ -2052,6 +2090,20 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 
 @keyframes ss-demo-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ss-demo-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* ── Demo summary nav buttons ─────────────────────────────────────────────── */
+.ss-summary-nav {
+  margin-top: 32px;
+  padding: 0 16px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.ss-summary-nav .ss-btn {
+  width: 100%;
+  max-width: 480px;
+}
 
 @media (max-width: 480px) {
   .ss-demo-compare-grid,

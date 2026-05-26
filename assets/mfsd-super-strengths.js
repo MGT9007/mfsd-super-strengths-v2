@@ -3388,14 +3388,34 @@
     return wrap;
   }
 
+  function showBadgeZoom(imageUrl, badgeName) {
+    const modal = el('div', 'ss-badge-zoom-modal');
+    const inner = el('div', 'ss-badge-zoom-inner');
+    const img   = document.createElement('img');
+    img.src       = imageUrl;
+    img.alt       = badgeName;
+    img.className = 'ss-badge-zoom-img';
+    inner.appendChild(img);
+    inner.appendChild(el('div', 'ss-badge-zoom-name', badgeName));
+    inner.appendChild(el('div', 'ss-badge-zoom-hint', 'Tap anywhere to close'));
+    modal.appendChild(inner);
+    modal.addEventListener('click', () => modal.remove());
+    document.addEventListener('keydown', function onEsc(e) {
+      if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', onEsc); }
+    });
+    document.body.appendChild(modal);
+  }
+
   function renderBadgeAward(container, imageUrl, type, coins) {
+    const badgeName = type === 'Winner' ? 'Super Strengths Winner Badge' : 'Super Strengths Badge';
     const div = el('div', 'ss-badge-award-item');
     if (imageUrl) {
       const imgWrap = el('div', 'ss-badge-award-img-wrap');
       const img = document.createElement('img');
       img.className = 'ss-badge-award-img';
       img.src       = imageUrl;
-      img.alt       = type + ' badge';
+      img.alt       = badgeName;
+      img.onclick   = () => showBadgeZoom(imageUrl, badgeName);
       img.onerror   = () => { img.replaceWith(el('div', 'ss-badge-award-fallback', type === 'Winner' ? '🏆' : '⭐')); };
       imgWrap.appendChild(img);
       if (type === 'Winner') {
@@ -3406,7 +3426,7 @@
     } else {
       div.appendChild(el('div', 'ss-badge-award-fallback', type === 'Winner' ? '🏆' : '⭐'));
     }
-    div.appendChild(el('div', 'ss-badge-award-name', type === 'Winner' ? 'Super Strengths Winner Badge' : 'Super Strengths Badge'));
+    div.appendChild(el('div', 'ss-badge-award-name', badgeName));
     div.appendChild(el('div', 'ss-badge-award-coins', '+' + coins + ' coins'));
     container.appendChild(div);
   }
@@ -4135,8 +4155,7 @@
     inner.appendChild(chatEl);
 
     // Nav buttons
-    const navWrap = el('div', '');
-    navWrap.style.cssText = 'padding:0 16px 32px;display:flex;flex-direction:column;gap:10px;';
+    const navWrap = el('div', 'ss-summary-nav');
     if (hasCompletionBadge || hasWinnerBadge) {
       const badgeLink = document.createElement('a');
       badgeLink.href      = cfg.badgesUrl;
