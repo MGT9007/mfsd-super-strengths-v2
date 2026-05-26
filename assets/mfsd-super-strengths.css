@@ -2091,18 +2091,21 @@ body.mfsd-role-student .ss-wrap .ss-card-tile.matched .ss-card-tile-front {
 @keyframes ss-demo-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ss-demo-fade-out { from { opacity: 1; } to { opacity: 0; } }
 
-/* ── Demo summary nav buttons ─────────────────────────────────────────────── */
+/* ── Summary nav buttons (demo + regular summary screens) ─────────────────── */
 .ss-summary-nav {
   margin-top: 32px;
   padding: 0 16px 32px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 12px;
 }
 .ss-summary-nav .ss-btn {
-  width: 100%;
-  max-width: 480px;
+  flex: 1;
+  min-width: 140px;
+  max-width: 240px;
+  margin: 0;
 }
 
 @media (max-width: 480px) {

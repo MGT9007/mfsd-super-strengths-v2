@@ -373,15 +373,15 @@
       `;
       const demoBtn = el('button', 'ss-btn ss-btn-demo ss-btn-full');
       demoBtn.innerHTML = cfg.steveAvatarUrl
-        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px;"> Try Demo with Steve`
-        : '🤖 Try Demo with Steve';
+        ? `<img src="${escHtml(cfg.steveAvatarUrl)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px;"> Play 1 player with Steve`
+        : '🤖 Play 1 player with Steve';
       demoBtn.onclick = handleDemoStart;
       inner.appendChild(demoBtn);
 
       if (cfg.welcomeChatChatbotId) {
         const chatPlaceholder = el('div', '');
         chatPlaceholder.id = 'ss-welcome-chat-placeholder';
-        chatPlaceholder.style.marginTop = '16px';
+        chatPlaceholder.style.marginTop = '28px';
         inner.appendChild(chatPlaceholder);
       }
 
@@ -816,7 +816,7 @@
 
     // Save + submit
     const saveBtn = el('button', 'ss-btn ss-btn-gold ss-btn-full', '💾 Save my strengths');
-    saveBtn.style.marginTop = '16px';
+    saveBtn.style.marginTop = '28px';
     saveBtn.id = 'ss-self-save';
     saveBtn.onclick = () => saveSelfStrengths(false);
     inner.appendChild(saveBtn);
@@ -2734,7 +2734,7 @@
         const studentUserId = isStudent ? cfg.userId : (studentPlayer?.user_id || '');
         const courseUrl = cfg.portalUrl + '?course_id=' + cfg.courseId + '&student_id=' + studentUserId;
 
-        let btnHtml = `<div style="display:flex;flex-direction:column;gap:10px;margin-top:20px;">`;
+        let btnHtml = `<div class="ss-summary-nav">`;
         if (isStudent) {
           btnHtml += `<a href="${escHtml(cfg.badgesUrl)}" class="ss-btn ss-btn-gold ss-btn-full">🏅 See My Badges</a>`;
         }
@@ -2753,7 +2753,7 @@
         const studentUserId = isStudent ? cfg.userId : (studentPlayer?.user_id || '');
         const courseUrl = cfg.portalUrl + '?course_id=' + cfg.courseId + '&student_id=' + studentUserId;
         area.innerHTML = `
-          <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+          <div class="ss-summary-nav">
             ${isStudent ? `<a href="${escHtml(cfg.badgesUrl)}" class="ss-btn ss-btn-gold ss-btn-full">🏅 See My Badges</a>` : ''}
             <a href="${escHtml(courseUrl)}" class="ss-btn ss-btn-ghost ss-btn-full">📚 Course Details</a>
           </div>`;
