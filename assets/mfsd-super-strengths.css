@@ -624,7 +624,7 @@ body.mfsd-role-student .ss-wrap .ss-snap-score-pill.me {
 }
 .ss-btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.12); }
 .ss-btn-danger { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35); color: #fca5a5; }
-.ss-btn-full { width: 100%; }
+.ss-btn-full { display: flex; width: 100%; max-width: 480px; margin-left: auto; margin-right: auto; }
 .ss-btn-sm { padding: 7px 14px; font-size: 12px; border-radius: 7px; }
 
 .ss-btn-group {
