@@ -1,9 +1,9 @@
 # MFSD Super Strengths Cards — v5.0 Design Document & Technical Specification
 
 **Plugin:** `mfsd-super-strengths`  
-**Version:** 5.0.0  
+**Version:** 5.5.10  
 **Prepared for:** My Future Self Digital  
-**Status:** Pre-build specification — approved before any code is written  
+**Status:** Live — updated to reflect production state  
 
 ---
 
@@ -86,7 +86,7 @@ Super Strengths Cards v5.0 replaces the real-time Snap game mode with a turn-bas
 ## 3. Game Flow — Full Phase Walkthrough
 
 ### Phase 0 — Game Start (student only)
-The student visits the Super Strengths page. If no active game exists and they have linked family members, they see the Start Game screen. They click **Start Game**, which creates the game record and notifies linked parents (presence-based — no emails at this stage).
+The student visits the Super Strengths page. If demo mode is enabled in admin and no family game is active, the demo option is offered first. The intro screen shows two buttons: **Play 1 player with Steve** (demo) and **Start Game** (family). If they have linked family members and click Start Game, the game record is created and parents are notified (presence-based — no emails at this stage).
 
 ### Phase 1 — Self-Strengths (all players, async)
 
@@ -618,22 +618,24 @@ Called by frontend once the student has viewed the summary. Mirrors the Solution
 ```
 mfsd-super-strengths/
 │
-├── mfsd-super-strengths.php              ← Modified (version bump, new hooks, cron removed for snap)
+├── mfsd-super-strengths.php              Bootstrap, singleton, shortcode, cron
 │
 ├── assets/
-│   ├── mfsd-super-strengths.css          ← Modified (new memory game styles added)
-│   └── mfsd-super-strengths.js           ← Full rewrite (new screen state machine)
+│   ├── mfsd-super-strengths.css          Theme-aware styles (Gamer + Corporate)
+│   └── mfsd-super-strengths.js           Vanilla-JS frontend state machine
 │
 ├── includes/
-│   ├── class-ss-db.php                   ← Modified (install() adds 7 new mfsd_sm_* tables)
-│   ├── class-ss-validator.php            ← Unchanged
-│   ├── class-ss-game.php                 ← Unchanged (guessing game + dormant snap methods)
-│   ├── class-ss-api.php                  ← Modified (new /memory/* routes added)
-│   ├── class-ss-memory.php               ← NEW — memory game engine
-│   └── class-ss-summary.php              ← NEW — summary builder + AI
+│   ├── class-ss-db.php                   Table definitions, install, seed data
+│   ├── class-ss-validator.php            Free-text content moderation pipeline
+│   ├── class-ss-game.php                 Guessing game engine (dormant snap methods)
+│   ├── class-ss-api.php                  REST API — memory + demo routes
+│   ├── class-ss-memory.php               Memory game engine (board, flip, scoring, turns)
+│   ├── class-ss-summary.php              Summary data builder + SteveGPT prompt construction
+│   ├── class-ss-badges.php               Badge award logic — MFSD_SS_Badges class
+│   └── class-ss-demo.php                 Demo mode engine (Steve picks, board, summary)
 │
 └── admin/
-    └── admin-page.php                    ← Modified (new settings sections)
+    └── admin-page.php                    Tabbed WP admin UI
 ```
 
 ---
@@ -794,7 +796,9 @@ Game ends when `NOW() > game_ends_at`. At game start, `game_ends_at = game_start
 | Matches | Strengths that appeared in both self and family cards, highlighted |
 | Steve Says | AI-generated paragraph (see §13) |
 | Chat with Steve | SteveGPT chatbot widget |
-| Badge | Awarded once student views summary |
+| Badge | Awarded once student views summary. Badge image is 150×150px with click-to-zoom modal (280×280px full-screen overlay, dismissible by click or Esc). |
+
+**Navigation buttons** (`.ss-summary-nav`): Displayed as a row (side by side) with `max-width: 240px` each and `flex: 1`. Two buttons: 🏅 See My Badges (gold) and 📚 Course Details (ghost). On the demo summary screen the labels are 🏅 View My Badges and 📚 Back to My Course.
 
 ### Parent view
 
@@ -972,6 +976,8 @@ If any prerequisite is incomplete, the student sees a specific message listing w
 | Demo game already completed (one attempt) | Summary screen only — no replay |
 
 Demo mode is a **one-time activity**. Once the student has completed it and viewed the summary, they cannot replay. A completed demo game is stored with `game_type = 'demo'` in `mfsd_sm_games`.
+
+The intro screen button for demo entry is labelled **"Play 1 player with Steve"** (with Steve's avatar if available). A spacer of 28px separates it from the chat widget below.
 
 ---
 
@@ -1363,7 +1369,25 @@ Minimum tile touch target: `60px wide × 80px tall` on mobile — the student th
 
 ---
 
-### 17.5 Root Padding & Min-Height
+### 17.5 CTA Button Sizing
+
+All primary CTA buttons across the plugin use the `.ss-btn-full` modifier which constrains them to a consistent size:
+
+```css
+.ss-btn-full {
+  display: flex;
+  width: 100%;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+```
+
+This applies to every full-width CTA button across all screens (entry, self-write picker, demo board, submission, memory game). It ensures no button stretches to a full-width banner on wide viewports.
+
+**Summary navigation** uses `.ss-summary-nav` with a row layout and per-button `max-width: 240px; flex: 1` so two buttons sit side by side at any reasonable viewport width.
+
+### 17.6 Root Padding & Min-Height
 
 Copied exactly from Solution Lens:
 
@@ -1377,11 +1401,11 @@ Copied exactly from Solution Lens:
 
 ---
 
-### 17.6 Admin CSS
+### 17.7 Admin CSS
 
 The plugin admin page uses the same `admin.css` class conventions as Solution Lens (`mfsd-btn`, `mfsd-table`, `mfsd-form-table`, `mfsd-status-badge`, `mfsd-modal` etc.) — the black/gold corporate theme with Montserrat/Playfair Display. No new admin CSS classes are invented; all new settings sections reuse existing classes from `admin.css`.
 
-### 17.7 Student vs Parent View
+### 17.8 Student vs Parent View
 
 All width parameters in §17.2–17.5 apply equally to both views. The sizing system is theme-agnostic — the same `640px` screen container, the same `480px` intro text, the same board grid rules apply whether the user is a student (dark gamer theme) or a parent (corporate gold theme).
 
@@ -1811,6 +1835,9 @@ The ordering gate checks all three in sequence. The locked message names whichev
 |---|---|
 | 4.6.0 | Snap mode added |
 | 5.0.0 | Snap replaced with Memory game; self-strengths phase added; differentiated summary; SteveGPT integration; demo mode with Steve AI picks from prior course data |
+| 5.5.8 | MYF-233: Demo compare panel column heading alignment (min-height). MYF-234: Badge click-to-zoom modal on summary screen. MYF-235: Summary nav buttons constrained to max-width 480px via `.ss-summary-nav` CSS class. MYF-236: Student age in chat widgets resolved via SteveGPT `content_aware` — no code change. |
+| 5.5.9 | MYF-238 (part 1): `.ss-btn-full` globally constrained to `max-width: 480px; display: flex; margin: auto` — all primary CTA buttons across every screen now consistent size. |
+| 5.5.10 | MYF-238 (part 2): Summary nav buttons now side-by-side (row layout). Demo intro button renamed "Play 1 player with Steve". Spacing increased between demo button and chatbot. Strengths picker Save button spacing increased. |
 
 ---
 
