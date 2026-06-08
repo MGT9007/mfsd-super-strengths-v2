@@ -3,7 +3,7 @@
 **Plugin:** `mfsd-super-strengths`  
 **Version:** 5.5.10  
 **Prepared for:** My Future Self Digital  
-**Status:** Live — updated to reflect production state  
+**Status:** Live — updated to reflect production state (v5.5.10)
 
 ---
 
@@ -73,6 +73,8 @@ Super Strengths Cards v5.0 replaces the real-time Snap game mode with a turn-bas
 |---|---|
 | `includes/class-ss-memory.php` | Memory game engine: board init, flip logic, match detection, scoring, turn rotation |
 | `includes/class-ss-summary.php` | Summary data builder, SteveGPT prompt construction, Solution Lens data fetcher |
+| `includes/class-ss-badges.php` | Badge award engine: completion + winner badges, Quest Log + Wallet integration |
+| `includes/class-ss-demo.php` | Demo mode engine: prerequisite checks, Steve pick generation, data fetchers, demo board/flip/summary |
 
 ### Files unchanged
 
@@ -147,7 +149,6 @@ All stored as WordPress options. Section added to the existing Super Strengths a
 
 | Option key | Label | Type | Default |
 |---|---|---|---|
-| `mfsd_ss_cards_per_target` | Cards per player | Number | 5 |
 | `mfsd_ss_free_text_11_12` | Allow free-text (11–12) | Toggle | Off |
 | `mfsd_ss_free_text_13_14` | Allow free-text (13–14) | Toggle | On |
 | `mfsd_ss_free_text_max` | Max free-text cards | Number | 2 |
@@ -155,6 +156,8 @@ All stored as WordPress options. Section added to the existing Super Strengths a
 | `mfsd_ss_free_text_max_len` | Max free-text length | Number | 40 |
 
 *(These already exist in v4 — no change.)*
+
+**Note:** Cards per player is a hardcoded constant (`MFSD_SS_DB::CARDS_PER_TARGET = 5`), not an admin option.
 
 ### 4.2 Card Pool Settings *(new)*
 
@@ -185,11 +188,13 @@ Seven chatbot IDs stored as WP options — one per distinct AI job. All follow t
 |---|---|---|---|
 | `mfsd_stevegpt_map_ss_welcome_intro` | Welcome intro message | Intro screen | Mode-aware copy — family vs demo, end condition type |
 | `mfsd_stevegpt_map_ss_welcome_chat` | Pre-game Q&A chatbot | Intro screen | Answers student questions before cards are written |
-| `mfsd_stevegpt_map_ss_student_summary` | Family game — student summary | Summary screen | Self vs family comparison; Solution Lens cross-reference |
-| `mfsd_stevegpt_map_ss_parent_summary` | Family game — parent summary | Summary screen | Adult tone; self vs student-wrote-about-parent comparison |
-| `mfsd_stevegpt_map_ss_family_chat` | Family game — chat widget | Summary screen | Full session context injected dynamically |
+| `mfsd_stevegpt_map_ss_student_summary` | Family game — student AI summary | Summary screen | Self vs family comparison; Solution Lens cross-reference |
+| `mfsd_stevegpt_map_ss_parent_summary` | Family game — parent AI summary | Summary screen | Adult tone; self vs student-wrote-about-parent comparison |
+| `mfsd_stevegpt_map_ss_student_summary_chat` | Family game — student chat widget | Summary screen | Full student session context injected dynamically |
+| `mfsd_stevegpt_map_ss_parent_summary_chat` | Family game — parent chat widget | Summary screen | Full parent session context injected dynamically |
 | `mfsd_stevegpt_map_ss_demo_picker` | Demo mode — Steve's card picks | Demo flow | Structured JSON output; must return 5 picks + rationale |
-| `mfsd_stevegpt_map_ss_demo_summary` | Demo mode — summary + chat | Demo summary screen | Summary paragraph + post-game Q&A |
+| `mfsd_stevegpt_map_ss_demo_summary` | Demo mode — AI summary | Demo summary screen | Summary paragraph |
+| `mfsd_stevegpt_map_ss_demo_chat` | Demo mode — chat widget | Demo summary screen | Post-game Q&A with demo session context |
 
 ---
 
@@ -209,6 +214,8 @@ The master game record. One row per game instance.
 CREATE TABLE mfsd_sm_games (
   id                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   game_key           VARCHAR(64)     NOT NULL UNIQUE,   -- e.g. 'sm_42_1718000000'
+  game_type          VARCHAR(20)     NOT NULL DEFAULT 'family',
+                                     -- family | demo
   student_user_id    BIGINT UNSIGNED NOT NULL,
   status             VARCHAR(30)     NOT NULL DEFAULT 'submission_self',
                                      -- submission_self | submission_others
@@ -314,7 +321,7 @@ CREATE TABLE mfsd_sm_board (
   game_id              BIGINT UNSIGNED NOT NULL,
   position             SMALLINT        NOT NULL,  -- 0-indexed board slot
   pair_key             VARCHAR(40)     NOT NULL,  -- both cards in a pair share this value
-  card_type            VARCHAR(20)     NOT NULL,  -- 'family_card' | 'self_strength'
+  card_type            VARCHAR(20)     NOT NULL,  -- 'family_card' | 'self_strength' | 'steve_pick'
   card_id              BIGINT UNSIGNED NULL,       -- FK mfsd_sm_cards.id (if family_card)
   self_strength_id     BIGINT UNSIGNED NULL,       -- FK mfsd_sm_self_strengths.id (if self_strength)
   -- Display data cached at deal time (avoids joins on every flip)
@@ -371,7 +378,7 @@ CREATE TABLE mfsd_sm_summaries (
   id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   game_id        BIGINT UNSIGNED NOT NULL,
   player_id      BIGINT UNSIGNED NOT NULL,
-  summary_type   VARCHAR(20)     NOT NULL,  -- 'student' | 'parent'
+  summary_type   VARCHAR(20)     NOT NULL,  -- 'student' | 'parent' | 'demo'
   ai_summary     LONGTEXT        NULL,
   generated_at   DATETIME        NULL,
   PRIMARY KEY (id),
@@ -616,13 +623,14 @@ Called by frontend once the student has viewed the summary. Mirrors the Solution
 ## 7. File Structure
 
 ```
-mfsd-super-strengths/
+mfsd-super-strengths-v2/
 │
 ├── mfsd-super-strengths.php              Bootstrap, singleton, shortcode, cron
 │
 ├── assets/
 │   ├── mfsd-super-strengths.css          Theme-aware styles (Gamer + Corporate)
-│   └── mfsd-super-strengths.js           Vanilla-JS frontend state machine
+│   ├── mfsd-super-strengths.js           Vanilla-JS frontend state machine
+│   └── badges/                           4 badge PNG designs (steverman, supersteve, wondersteve, harley_steve)
 │
 ├── includes/
 │   ├── class-ss-db.php                   Table definitions, install, seed data
@@ -634,8 +642,12 @@ mfsd-super-strengths/
 │   ├── class-ss-badges.php               Badge award logic — MFSD_SS_Badges class
 │   └── class-ss-demo.php                 Demo mode engine (Steve picks, board, summary)
 │
-└── admin/
-    └── admin-page.php                    Tabbed WP admin UI
+├── admin/
+│   └── admin-page.php                    Tabbed WP admin UI
+│
+└── techspecs/
+    ├── SuperStrengths_TechSpec_v1.0.md   Historical spec (v4.x guessing game + snap)
+    └── super-strengths-memory-spec.md    This document
 ```
 
 ---
@@ -752,7 +764,7 @@ The banner includes a countdown timer based on `current_turn_started_at + turn_t
 
 ### Auto-advance
 
-A WordPress cron event (`mfsd_ss_turn_timeout_check`) runs every minute. It checks:
+A WordPress cron event (`mfsd_ss_turn_timeout_check`) runs hourly. It checks:
 
 ```
 SELECT * FROM mfsd_sm_games WHERE status = 'playing'
@@ -779,7 +791,7 @@ Game ends when all positions on the board have `is_matched = 1`. Winner is the p
 Game ends immediately when any player's `score` reaches `target_matches`. That player is the winner. Checked at the end of every successful match.
 
 ### `timed`
-Game ends when `NOW() > game_ends_at`. At game start, `game_ends_at = game_started_at + time_limit_mins minutes`. The cron checks this every minute. The frontend countdown timer is driven client-side from `game_ends_at`.
+Game ends when `NOW() > game_ends_at`. At game start, `game_ends_at = game_started_at + time_limit_mins minutes`. The hourly cron detects expired timed games and marks them complete. The frontend countdown timer is driven client-side from `game_ends_at`.
 
 ---
 
@@ -820,7 +832,16 @@ Game ends when `NOW() > game_ends_at`. At game start, `game_ends_at = game_start
 
 ## 13. AI / SteveGPT Integration
 
-Mirrors the Solution Lens pattern exactly. Two chatbot IDs stored as WP options.
+Uses the SteveGPT plugin (`$GLOBALS['stevegtp']`) with MWAI fallback for compatibility:
+
+```php
+$ai = $GLOBALS['stevegtp'] ?? $GLOBALS['mwai'] ?? null;
+if ($ai) {
+    $result = $ai->simpleTextQuery($prompt);
+}
+```
+
+Nine chatbot/prompt IDs stored as WP options (see §4.5). Summary generation and demo picker use direct `simpleTextQuery()` calls; chat widgets are rendered via the SteveGPT shortcode with context injection.
 
 ### 13.1 Summary generation
 
@@ -940,28 +961,25 @@ Demo mode answers the question: *"What if no family is available yet?"* Rather t
 
 ---
 
-### 16.2 Ordering Gate
+### 16.2 Prerequisites Gate
 
-Demo mode is gated. The student **cannot** access Super Strengths (in any mode) until all three of the following tasks are marked `completed` in the task ordering system:
+Demo mode availability is determined by checking whether **data exists** in each of the three prerequisite data sources — not by task completion status in the ordering system. This allows demo mode to activate as soon as the student has submitted results, regardless of whether the course tasks are formally marked complete.
 
-| Task | Plugin | Data used by Steve |
-|---|---|---|
-| Solution Lens | `mfsd-solution-lens` | Perception style — where student and parent saw same vs different things; the Gestalt principles that emerged |
-| Word Association | `mfsd-word-association` *(assumed slug)* | The words the student associated most quickly / strongly |
-| Who Am I | `mfsd-who-am-i` *(assumed slug)* | MBTI-style personality type result |
-
-The existing ordering gate in `mfsd-super-strengths.php` already checks `mfsd_get_task_status()`. This gate is extended to require all three tasks, not just a single predecessor:
+| Prerequisite | Plugin | Table checked | Available if |
+|---|---|---|---|
+| Solution Lens | `mfsd-solution-lens` | `mfsd_lens_sessions` | Completed session exists |
+| Word Association | `mfsd-word-association` | `mfsd_word_associations` | ≥ 3 rows for the student |
+| Personality Test | `mfsd-personality-test` | `mfsd_ptest_results` | COMBINED result with `mbti_type` exists |
 
 ```php
-$prerequisites = ['solution_lens', 'word_association', 'who_am_i'];
-foreach ($prerequisites as $task) {
-    if (mfsd_get_task_status($student_id, $task) !== 'completed') {
-        // Return locked message with list of what still needs completing
-    }
-}
+// In MFSD_SS_Demo::check_prerequisites()
+$lens = self::fetch_lens_data($student_user_id);
+$wa   = self::fetch_word_assoc_data($student_user_id);
+$pers = self::fetch_personality_data($student_user_id);
+return $lens['available'] && $wa['available'] && $pers['available'];
 ```
 
-If any prerequisite is incomplete, the student sees a specific message listing which tasks remain, not a generic lock screen. This is consistent with the course's philosophy of transparent progress.
+If any prerequisite is unavailable, the frontend shows demo as locked with a message listing what needs completing.
 
 ---
 
@@ -1054,8 +1072,8 @@ Example rationale cards:
 > **Creative** *(Word Association)*
 > "Several of your fastest word associations pointed toward imagination and originality. Your mind reaches for the new and unexpected — that's a creative strength showing up."
 
-> **Curious** *(Who Am I)*
-> "Your personality type — [type] — is strongly associated with a love of learning and asking 'why'. Curiosity isn't just something you do; it looks like it's part of how you're wired."
+> **Curious** *(Personality Test)*
+> "Your personality type — [MBTI type] — is strongly associated with a love of learning and asking 'why'. Curiosity isn't just something you do; it looks like it's part of how you're wired."
 
 **Panel 3 — Steve's Full AI Summary**
 
@@ -1089,25 +1107,28 @@ Data passed to prompt: number of agreements, nature of differences, and the exis
 
 #### Source 2 — Word Association
 ```php
-// Assumed pattern — to be confirmed against actual plugin schema
-$word_assoc = $wpdb->get_results($wpdb->prepare(
-    "SELECT word, response_time_ms FROM {$wpdb->prefix}mfsd_wa_responses
-     WHERE student_id = %d
-     ORDER BY response_time_ms ASC LIMIT 10",
+$rows = $wpdb->get_results($wpdb->prepare(
+    "SELECT word, association_1, association_2, association_3, time_taken
+     FROM {$wpdb->prefix}mfsd_word_associations
+     WHERE user_id = %d ORDER BY time_taken ASC LIMIT 5",
     $student_id
 ));
 ```
 
-Data passed to prompt: the student's fastest word associations (quickest response time = strongest instinctive link). **Note:** The exact table and column names must be confirmed against the Word Association plugin schema before this function is implemented. A safe fallback (`word_assoc_available = false`) must be in place if the table doesn't exist.
+Data passed to prompt: the student's 5 fastest word associations (shortest `time_taken` = strongest instinctive link), formatted as `"word: assoc1, assoc2, assoc3"` per line. Requires at least 3 rows; falls back to `available = false` if the table doesn't exist or has insufficient data.
 
-#### Source 3 — Who Am I
+#### Source 3 — Personality Test (mfsd-personality-test)
 ```php
-// Assumed pattern — to be confirmed against actual plugin schema
-$personality = get_user_meta($student_id, 'mfsd_personality_type', true);
-$personality_label = get_user_meta($student_id, 'mfsd_personality_label', true);
+$result = $wpdb->get_row($wpdb->prepare(
+    "SELECT mbti_type, disc_primary
+     FROM {$wpdb->prefix}mfsd_ptest_results
+     WHERE user_id = %d AND test_type = 'COMBINED' AND mbti_type IS NOT NULL
+     ORDER BY id DESC LIMIT 1",
+    $student_id
+));
 ```
 
-Data passed to prompt: the student's MBTI-style type code and label. **Note:** Meta key names must be confirmed against the Who Am I plugin before implementation. Safe fallback if not set.
+Data passed to prompt: the student's MBTI type code (e.g. `INTJ`) and DISC primary style, plus a human-readable label generated by `MFSD_SS_Demo::mbti_label()`. Falls back to `available = false` if the `mfsd_ptest_results` table doesn't exist or has no COMBINED result.
 
 ---
 
@@ -1133,8 +1154,9 @@ Steve's prior summary of this activity: "{lens_ai_summary}"
 {word_1}, {word_2}, {word_3}, {word_4}, {word_5}, {word_6}, {word_7}, {word_8}, {word_9}, {word_10}
 [OMIT THIS SECTION if word_assoc_available = false]
 
-=== WHO AM I DATA ===
-{student_name}'s personality type: {type_code} — {type_label}
+=== PERSONALITY TEST DATA ===
+{student_name}'s MBTI type: {mbti_type} — {type_label}
+DISC primary style: {disc_primary}
 [OMIT THIS SECTION if personality_available = false]
 
 === {student_name}'s OWN PICKS ===
@@ -1162,7 +1184,7 @@ Return format:
 ]
 ```
 
-The response is parsed as JSON. If parsing fails, a safe fallback of 5 random strengths from the library is used, with rationale set to a generic Steve phrase. The fallback is logged for admin review.
+The response is parsed as JSON. If parsing fails **or fewer than `PICKS_MIN_VALID = 3` valid picks are returned**, a safe fallback of 5 random strengths from the library is used, with rationale set to a generic Steve phrase. The fallback is logged for admin review.
 
 ---
 
@@ -1195,7 +1217,7 @@ Added to the admin settings page under a "Demo Mode" sub-section:
 | `mfsd_ss_demo_mode_enabled` | Enable demo mode | Toggle | Off | When on, demo is offered to students who meet prerequisites |
 | `mfsd_ss_demo_time_limit_mins` | Demo game time limit (minutes) | Number | 3 | Admin-configurable |
 
-The three SteveGPT chatbot IDs for demo mode (`mfsd_stevegpt_map_ss_demo_picker`, `mfsd_stevegpt_map_ss_demo_summary`, and the welcome intro/chat shared with the family game) are configured in the SteveGPT settings section — see §4.5 for the full list of all 7 chatbot option keys.
+The SteveGPT chatbot IDs for demo mode (`mfsd_stevegpt_map_ss_demo_picker`, `mfsd_stevegpt_map_ss_demo_summary`, `mfsd_stevegpt_map_ss_demo_chat`, and the welcome intro/chat shared with the family game) are configured in the SteveGPT settings section — see §4.5 for the full list of all 9 chatbot option keys.
 
 ---
 
@@ -1259,14 +1281,7 @@ These are display only — the messages rotate on a 2-second timer while the rea
 
 ### 16.13 Demo Mode & `mfsd_sm_games` Table
 
-Demo games use the existing `mfsd_sm_games` table with one additional column:
-
-```sql
-ALTER TABLE mfsd_sm_games
-  ADD COLUMN game_type VARCHAR(20) NOT NULL DEFAULT 'family'
-  AFTER game_key;
-  -- Values: 'family' | 'demo'
-```
+Demo games use the `mfsd_sm_games` table. The `game_type` column (`'family' | 'demo'`) is part of the base CREATE TABLE DDL (see §5.1) — no ALTER TABLE is required.
 
 The `winner_player_id` column is `NULL` for demo games (no winner — purely reflective). The `score` on the student's player row records how many pairs they matched.
 
@@ -1576,8 +1591,10 @@ Two badges are available in Super Strengths v5.0. Both are student-only — pare
 
 | Badge | Slug | Earned when |
 |---|---|---|
-| Completion | `badge_ss_complete` | Student completes the full family game summary screen **or** completes demo mode |
+| Completion | `badge_ss_complete` | Student views the **family game** summary screen and calls `POST /memory/award-badge` |
 | Winner | `badge_ss_winner` | Student wins the family game (most pairs in `all_match`; first to target in `first_to_x`; most pairs when timer ends in `timed`) |
+
+**Demo mode does not award any badge.** There is no `/demo/award-badge` endpoint. The badge is tied to completing the full family game.
 
 A student who wins also receives both badges — the completion badge is always awarded alongside the winner badge, not instead of it.
 
@@ -1816,16 +1833,17 @@ For very large boards, a **"Show only unmatched"** toggle will be added (Phase F
 
 ---
 
-## Appendix C — Prerequisite Task Slugs
+## Appendix C — Prerequisite Data Sources
 
-| Task | Slug used in ordering system | Data location |
-|---|---|---|
-| Solution Lens | `solution_lens` | `mfsd_lens_sessions`, `mfsd_lens_responses` |
-| Word Association | `word_association` | **To be confirmed against plugin schema** |
-| Who Am I | `who_am_i` | **To be confirmed against plugin schema** |
-| Super Strengths | `super_strengths` | `mfsd_sm_games` |
+Demo mode checks for data existence, not task ordering status. All three sources must have data for demo to be available.
 
-The ordering gate checks all three in sequence. The locked message names whichever tasks remain incomplete so the student knows exactly what to do next.
+| Source | Plugin | Table | Key columns |
+|---|---|---|---|
+| Solution Lens | `mfsd-solution-lens` | `mfsd_lens_sessions` | `student_id`, `status = 'complete'` |
+| Word Association | `mfsd-word-association` | `mfsd_word_associations` | `user_id`, `word`, `association_1/2/3`, `time_taken` |
+| Personality Test | `mfsd-personality-test` | `mfsd_ptest_results` | `user_id`, `test_type = 'COMBINED'`, `mbti_type`, `disc_primary` |
+
+The Super Strengths ordering gate (for students) uses task slug `super_strengths` via `mfsd_get_task_status()` / `mfsd_set_task_status()`.
 
 ---
 
@@ -1833,13 +1851,13 @@ The ordering gate checks all three in sequence. The locked message names whichev
 
 | Version | Notes |
 |---|---|
-| 4.6.0 | Snap mode added |
-| 5.0.0 | Snap replaced with Memory game; self-strengths phase added; differentiated summary; SteveGPT integration; demo mode with Steve AI picks from prior course data |
+| 4.6.0 | Snap mode added (snap_sessions, snap_hands, snap_claims tables). Real-time bullseye claim. Tiebreaker mechanic. |
+| 5.0.0 | Snap replaced with Memory game. Self-strengths phase (Phase 1). Turn-based board play. Differentiated student/parent summary screens. SteveGPT integration (9 chatbot slots). Demo mode with Steve AI picks drawn from Lens + Word Assoc + Personality data. Badge system (completion + winner). `class-ss-memory.php`, `class-ss-summary.php`, `class-ss-badges.php`, `class-ss-demo.php` added. 8 new `mfsd_sm_*` tables. |
 | 5.5.8 | MYF-233: Demo compare panel column heading alignment (min-height). MYF-234: Badge click-to-zoom modal on summary screen. MYF-235: Summary nav buttons constrained to max-width 480px via `.ss-summary-nav` CSS class. MYF-236: Student age in chat widgets resolved via SteveGPT `content_aware` — no code change. |
 | 5.5.9 | MYF-238 (part 1): `.ss-btn-full` globally constrained to `max-width: 480px; display: flex; margin: auto` — all primary CTA buttons across every screen now consistent size. |
 | 5.5.10 | MYF-238 (part 2): Summary nav buttons now side-by-side (row layout). Demo intro button renamed "Play 1 player with Steve". Spacing increased between demo button and chatbot. Strengths picker Save button spacing increased. |
 
 ---
 
-*End of specification — v5.0.0 — MFSD Super Strengths Cards*
+*End of specification — v5.5.10 — MFSD Super Strengths Cards*
 
