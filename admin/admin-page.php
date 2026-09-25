@@ -41,7 +41,7 @@ if (isset($_POST['ss_save_config']) && check_admin_referer('mfsd_ss_config')) {
     update_option('mfsd_ss_demo_mode_enabled',     isset($_POST['demo_mode_enabled']) ? '1' : '0');
     update_option('mfsd_ss_demo_time_limit_mins',  max(1, (int)($_POST['demo_time_limit_mins'] ?? 3)));
     // Memory game SteveGPT slots
-    $sg_keys = ['ss_welcome_intro','ss_welcome_chat','ss_student_summary','ss_parent_summary','ss_student_summary_chat','ss_parent_summary_chat','ss_demo_picker','ss_demo_summary','ss_demo_chat'];
+    $sg_keys = ['ss_welcome_intro','ss_welcome_chat','ss_student_summary','ss_parent_summary','ss_student_summary_chat','ss_parent_summary_chat','ss_demo_picker','ss_demo_summary','ss_demo_chat','ss_game_summary'];
     foreach ($sg_keys as $k) {
         update_option('mfsd_stevegpt_map_' . $k, sanitize_text_field($_POST['sg_' . $k] ?? ''));
     }
@@ -559,6 +559,7 @@ $pending_flags = count($flags);
                     'ss_demo_picker'          => ['Demo card picker',         'Steve AI picks cards for demo mode.'],
                     'ss_demo_summary'         => ['Demo summary',             'AI summary generated after a demo game.'],
                     'ss_demo_chat'            => ['Demo chatbot',             'Chatbot on the demo results screen.'],
+                    'ss_game_summary'         => ['Game strengths summary',   'Student AI reflection on the strength cards their family wrote (game summary + results screens).'],
                 ];
                 foreach ($sg_labels as $k => [$label, $desc]):
                     $opt = 'mfsd_stevegpt_map_' . $k;

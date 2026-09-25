@@ -2,13 +2,13 @@
 /**
  * Plugin Name: MFSD Super Strengths Cards
  * Description: Family card game — Extended (Phase A+B), Family Short (Phase A), or Memory mode.
- * Version: 5.5.10
+ * Version: 5.6.0
  * Author: MisterT9007
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('MFSD_SS_VERSION', '5.5.10');
+define('MFSD_SS_VERSION', '5.6.0');
 define('MFSD_SS_PATH',    plugin_dir_path(__FILE__));
 define('MFSD_SS_URL',     plugin_dir_url(__FILE__));
 
@@ -187,6 +187,24 @@ final class MFSD_Super_Strengths {
     }
 
     public function register_stevegpt_slots(array $slots): array {
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Welcome intro',
+            'option' => 'mfsd_stevegpt_map_ss_welcome_intro',
+            'tokens' => ['student_name', 'student_age', 'end_condition'],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Welcome chat',
+            'option' => 'mfsd_stevegpt_map_ss_welcome_chat',
+            'tokens' => [],
+        ];
+        $slots[] = [
+            'plugin' => 'Super Strengths',
+            'role'   => 'Game strengths summary',
+            'option' => 'mfsd_stevegpt_map_ss_game_summary',
+            'tokens' => ['student_name', 'strengths_list'],
+        ];
         $slots[] = [
             'plugin' => 'Super Strengths',
             'role'   => 'Student summary',

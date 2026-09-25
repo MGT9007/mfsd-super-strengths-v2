@@ -234,20 +234,43 @@ class MFSD_SS_Game {
     // GUESSING GAME — AI SUMMARY
     // =========================================================================
     public static function generate_strengths_summary(array $cards, string $name): ?string {
-        if (empty($cards) || !isset($GLOBALS['mwai'])) return null;
+        if (empty($cards)) return null;
         $list = implode(', ', array_column($cards, 'strength_text'));
+
+        $prompt  = "You are a warm, encouraging coach speaking directly to {$name}, a student aged 11–14.\n\n";
+        $prompt .= "Here are all the Super Strength cards that {$name}'s family wrote for them:\n{$list}\n\n";
+        $prompt .= "Write 3–4 sentences that:\n";
+        $prompt .= "1. Celebrate the themes you notice.\n";
+        $prompt .= "2. Name one or two standout patterns.\n";
+        $prompt .= "3. Suggest one specific way {$name} could lean into a strength this week.\n\n";
+        $prompt .= "Rules: Address {$name} as 'you'/'your'. UK English. Warm. Age-appropriate. Start with: **Steve says:**";
+
+        $result = self::steve_task('mfsd_stevegpt_map_ss_game_summary', $prompt, [
+            'student_name'   => $name,
+            'strengths_list' => $list,
+        ], get_current_user_id());
+
+        return $result !== '' ? $result : null;
+    }
+
+    // =========================================================================
+    // SteveGPT TASK HELPER (MFSD chatbot implementation pattern — task mode)
+    // Reads the chatbot from its integration-slot option. If the chatbot has a
+    // prompt template, the tokens are rendered into it; otherwise the built-in
+    // fallback prompt is sent. Returns '' when not configured or on error.
+    // =========================================================================
+    public static function steve_task(string $option, string $fallback_prompt, array $tokens, int $user_id): string {
+        $chatbot_id = get_option($option, '');
+        if (!$chatbot_id || !class_exists('SteveGPT_Chatbot')) return '';
+
         try {
-            $prompt  = "You are a warm, encouraging coach speaking directly to {$name}, a student aged 11–14.\n\n";
-            $prompt .= "Here are all the Super Strength cards that {$name}'s family wrote for them:\n{$list}\n\n";
-            $prompt .= "Write 3–4 sentences that:\n";
-            $prompt .= "1. Celebrate the themes you notice.\n";
-            $prompt .= "2. Name one or two standout patterns.\n";
-            $prompt .= "3. Suggest one specific way {$name} could lean into a strength this week.\n\n";
-            $prompt .= "Rules: Address {$name} as 'you'/'your'. UK English. Warm. Age-appropriate. Start with: **Steve says:**";
-            return $GLOBALS['mwai']->simpleTextQuery($prompt);
-        } catch (Exception $e) {
-            error_log('MFSD SS: AI summary error: ' . $e->getMessage());
-            return null;
+            $chatbot = SteveGPT_Chatbot::get($chatbot_id);
+            $config  = $chatbot->get_config();
+            $prompt  = !empty($config['prompt_template']) ? $chatbot->render_prompt($tokens) : $fallback_prompt;
+            return (string) $chatbot->query($prompt, $user_id);
+        } catch (\Exception $e) {
+            error_log('[SuperStrengths] SteveGPT task error (' . $option . '): ' . $e->getMessage());
+            return '';
         }
     }
 

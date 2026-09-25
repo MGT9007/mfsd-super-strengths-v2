@@ -1311,7 +1311,7 @@ class MFSD_SS_API {
         $age        = (int) get_user_meta($uid, 'mfsd_age', true);
         $chatbot_id = get_option('mfsd_stevegpt_map_ss_welcome_intro', '');
 
-        if (!$chatbot_id || !isset($GLOBALS['stevegtp'])) {
+        if (!$chatbot_id || !class_exists('SteveGPT_Chatbot')) {
             return rest_ensure_response(['ok' => true, 'intro_text' => '', 'source' => 'fallback']);
         }
 
@@ -1333,12 +1333,11 @@ class MFSD_SS_API {
             . "Keep it to 3–4 sentences. Warm, age-appropriate. Mention that picking their own strengths first is powerful.\n"
             . "End with '— Steve'. No ** or ## formatting.";
 
-        try {
-            $ai = $GLOBALS['stevegtp'];
-            $intro_text = $ai->simpleTextQuery($prompt, $chatbot_id);
-        } catch (\Exception $e) {
-            $intro_text = '';
-        }
+        $intro_text = MFSD_SS_Game::steve_task('mfsd_stevegpt_map_ss_welcome_intro', $prompt, [
+            'student_name'  => $name,
+            'student_age'   => $age,
+            'end_condition' => $end_cond,
+        ], $uid);
 
         return rest_ensure_response([
             'ok'         => true,
@@ -1712,7 +1711,7 @@ class MFSD_SS_API {
 
         // AI summary ONLY for students — never generate an analysis about a parent
         $ai_summary = '';
-        if ($viewer_role === 'student' && !empty($GLOBALS['mwai'])) {
+        if ($viewer_role === 'student' && get_option('mfsd_stevegpt_map_ss_game_summary', '')) {
             $my_data = null;
             foreach ($by_target as $t) {
                 if ($t['is_me']) { $my_data = $t; break; }
@@ -1729,11 +1728,10 @@ class MFSD_SS_API {
                     . "In 3-4 warm, encouraging sentences, reflect on what these strengths reveal about {$name} as a person "
                     . "and their potential. Use the Solutions Mindset voice — solution-focused, empowering, specific. "
                     . "Speak directly to {$name}. Begin with 'Steve says:'";
-                try {
-                    $ai_summary = $GLOBALS['mwai']->simpleTextQuery($prompt);
-                } catch (\Exception $e) {
-                    $ai_summary = '';
-                }
+                $ai_summary = MFSD_SS_Game::steve_task('mfsd_stevegpt_map_ss_game_summary', $prompt, [
+                    'student_name'   => $name,
+                    'strengths_list' => $list,
+                ], $uid);
             }
         }
 
